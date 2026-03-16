@@ -1,6 +1,17 @@
 package com.cluegame.cards;
 
-/** Represents a weapon card e.g. Dagger. @author Team 52 */
+/**
+ * Represents a weapon card in Clue!
+ * There are 6 weapon cards in the game.
+ * @author Team 52
+ */
 public class WeaponCard extends Card {
-    public WeaponCard(String name) { super(name, CardType.WEAPON); }
+
+    /**
+     * Constructs a weapon card with the given name.
+     * @param name the name of the weapon
+     */
+    public WeaponCard(String name) {
+        super(name, CardType.WEAPON);
+    }
 }

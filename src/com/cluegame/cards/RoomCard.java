@@ -1,6 +1,17 @@
 package com.cluegame.cards;
 
-/** Represents a room card e.g. Kitchen. @author Team 52 */
+/**
+ * Represents a room card in Clue!
+ * There are 9 room cards in the game.
+ * @author Team 52
+ */
 public class RoomCard extends Card {
-    public RoomCard(String name) { super(name, CardType.ROOM); }
+
+    /**
+     * Constructs a room card with the given name.
+     * @param name the name of the room
+     */
+    public RoomCard(String name) {
+        super(name, CardType.ROOM);
+    }
 }

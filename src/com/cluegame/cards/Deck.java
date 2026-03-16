@@ -1,38 +1,42 @@
 package com.cluegame.cards;
-import com.cluegame.players.Player;
-import java.util.List;
+
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 /**
- * Represents the full 21-card deck. Handles shuffling, dealing and envelope population.
+ * Represents the full deck of 21 Clue! cards.
+ * Handles shuffling, sealing the murder envelope, and dealing to players.
  * @author Team 52
  */
 public class Deck {
+
     private List<Card> cards;
 
+    /**
+     * Constructs a full deck of 21 cards:
+     * 6 suspects, 6 weapons and 9 rooms.
+     */
     public Deck() {
         cards = new ArrayList<>();
-        populateDeck();
-    }
 
-    /** Populates deck with all 6 suspects, 6 weapons and 9 room cards. */
-    private void populateDeck() {
-        // Suspects
-        cards.add(new SuspectCard("Col Mustard"));
-        cards.add(new SuspectCard("Prof Plum"));
-        cards.add(new SuspectCard("Rev Green"));
-        cards.add(new SuspectCard("Mrs Peacock"));
+        // 6 Suspects
         cards.add(new SuspectCard("Miss Scarlett"));
+        cards.add(new SuspectCard("Colonel Mustard"));
         cards.add(new SuspectCard("Mrs White"));
-        // Weapons
-        cards.add(new WeaponCard("Dagger"));
+        cards.add(new SuspectCard("Reverend Green"));
+        cards.add(new SuspectCard("Mrs Peacock"));
+        cards.add(new SuspectCard("Professor Plum"));
+
+        // 6 Weapons
         cards.add(new WeaponCard("Candlestick"));
+        cards.add(new WeaponCard("Knife"));
+        cards.add(new WeaponCard("Lead Pipe"));
         cards.add(new WeaponCard("Revolver"));
         cards.add(new WeaponCard("Rope"));
-        cards.add(new WeaponCard("Lead Piping"));
-        cards.add(new WeaponCard("Spanner"));
-        // Rooms
+        cards.add(new WeaponCard("Wrench"));
+
+        // 9 Rooms
         cards.add(new RoomCard("Kitchen"));
         cards.add(new RoomCard("Ballroom"));
         cards.add(new RoomCard("Conservatory"));
@@ -45,14 +49,42 @@ public class Deck {
     }
 
     /**
-     * Shuffles and deals remaining cards to players after envelope is filled.
-     * @param players list of players to deal to
-     * @param envelope the murder envelope to populate first
+     * Shuffles the deck randomly.
      */
-    public void shuffleAndDeal(List<Player> players, MurderEnvelope envelope) {
+    public void shuffle() {
         Collections.shuffle(cards);
-        // TODO: pick one of each type for envelope, deal rest round-robin to players
     }
 
-    public List<Card> getCards() { return cards; }
+    /**
+     * Returns the total number of cards in the deck.
+     * @return number of cards
+     */
+    public int size() {
+        return cards.size();
+    }
+
+    /**
+     * Deals cards as evenly as possible to the given number of players.
+     * Returns a list of hands, one per player.
+     * @param numPlayers the number of players to deal to
+     * @return list of card hands
+     */
+    public List<List<Card>> deal(int numPlayers) {
+        List<List<Card>> hands = new ArrayList<>();
+        for (int i = 0; i < numPlayers; i++) {
+            hands.add(new ArrayList<>());
+        }
+        for (int i = 0; i < cards.size(); i++) {
+            hands.get(i % numPlayers).add(cards.get(i));
+        }
+        return hands;
+    }
+
+    /**
+     * Returns all cards in the deck.
+     * @return list of all cards
+     */
+    public List<Card> getCards() {
+        return cards;
+    }
 }

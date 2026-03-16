@@ -6,7 +6,6 @@ package com.cluegame.model;
  */
 public class Square {
 
-    /** The type of this square */
     public enum Type {
         CORRIDOR, ROOM, BLOCKED, START
     }
@@ -14,7 +13,7 @@ public class Square {
     private int row;
     private int col;
     private Type type;
-    private Room room; // non-null if this square is a room entrance
+    private Room room;
     private boolean occupied;
 
     /**
