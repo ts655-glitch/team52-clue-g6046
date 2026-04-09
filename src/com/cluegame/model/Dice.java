@@ -5,7 +5,7 @@ import java.util.Random;
 /**
  * Represents a pair of fair six-sided dice.
  * Each die has an equal probability of landing on any face (1-6).
- * @author Team 52
+ * @author Thanh Shaw
  */
 public class Dice {
 

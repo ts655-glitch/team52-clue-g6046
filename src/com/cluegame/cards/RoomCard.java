@@ -3,7 +3,7 @@ package com.cluegame.cards;
 /**
  * Represents a room card in Clue!
  * There are 9 room cards in the game.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public class RoomCard extends Card {
 

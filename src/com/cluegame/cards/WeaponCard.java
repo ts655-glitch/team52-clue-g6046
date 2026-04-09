@@ -3,7 +3,7 @@ package com.cluegame.cards;
 /**
  * Represents a weapon card in Clue!
  * There are 6 weapon cards in the game.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public class WeaponCard extends Card {
 

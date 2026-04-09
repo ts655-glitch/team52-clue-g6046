@@ -6,7 +6,7 @@ import java.util.Set;
 /**
  * Tracks which cards a player has seen or eliminated during the game.
  * Used by AI to make informed decisions.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public class DetectiveNotepad {
     private Set<String> seenCards;

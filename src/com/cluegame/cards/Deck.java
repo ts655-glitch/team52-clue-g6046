@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * Represents the full deck of 21 Clue! cards.
  * Handles shuffling, sealing the murder envelope, and dealing to players.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public class Deck {
 

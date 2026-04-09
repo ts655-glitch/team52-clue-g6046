@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * Abstract base class representing a player in Clue!
  * Can be extended by HumanPlayer or AIPlayer.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public abstract class Player {
 

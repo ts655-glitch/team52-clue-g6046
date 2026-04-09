@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * Represents a room on the Clue! board.
  * Rooms have a name, a list of door squares, and an optional secret passage.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public class Room {
 

@@ -11,7 +11,7 @@ import java.util.Random;
 /**
  * Represents an autonomous AI player in Clue!
  * Makes random decisions as permitted by the spec.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public class AIPlayer extends Player {
 

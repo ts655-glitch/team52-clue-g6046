@@ -3,7 +3,7 @@ package com.cluegame.cards;
 /**
  * Abstract base class representing a Clue! game card.
  * All cards have a name and a type.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public abstract class Card {
 

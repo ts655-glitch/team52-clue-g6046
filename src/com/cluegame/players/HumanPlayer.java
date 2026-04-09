@@ -6,7 +6,7 @@ import com.cluegame.model.Suggestion;
 /**
  * Represents a human-controlled player in Clue!
  * Decisions are made via the GUI in later sprints.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public class HumanPlayer extends Player {
 

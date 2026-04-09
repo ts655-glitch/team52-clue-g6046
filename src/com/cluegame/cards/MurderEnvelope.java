@@ -3,7 +3,7 @@ package com.cluegame.cards;
 /**
  * Represents the murder envelope containing the solution to the crime.
  * Holds exactly one suspect, one weapon and one room card.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public class MurderEnvelope {
 

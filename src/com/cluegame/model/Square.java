@@ -2,7 +2,7 @@ package com.cluegame.model;
 
 /**
  * Represents a single cell on the game board.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public class Square {
 

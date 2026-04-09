@@ -9,7 +9,7 @@ import java.util.Map;
 /**
  * Represents the Clue! game board.
  * The board is a 24x25 grid of squares loaded from an external config file.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public class Board {
 

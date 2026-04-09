@@ -3,7 +3,7 @@ package com.cluegame.cards;
 /**
  * Represents a suspect card in Clue!
  * There are 6 suspect cards in the game.
- * @author Team 52
+ * @author Thanh Shaw
  */
 public class SuspectCard extends Card {
 
