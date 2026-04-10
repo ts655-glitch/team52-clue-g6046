@@ -1,7 +1,10 @@
 package com.cluegame.players;
 
 import com.cluegame.cards.Card;
+import com.cluegame.model.Accusation;
 import com.cluegame.model.Board;
+import com.cluegame.model.Dice;
+import com.cluegame.model.Room;
 import com.cluegame.model.Suggestion;
 
 import java.util.ArrayList;
@@ -20,6 +23,7 @@ public abstract class Player {
     private int col;
     private List<Card> hand;
     private boolean active; // false if player has made a wrong accusation
+    private Room currentRoom; // the room the player is in, or null if in a corridor
 
     /**
      * Constructs a player with a name, token and starting position.
@@ -35,19 +39,48 @@ public abstract class Player {
         this.col = startCol;
         this.hand = new ArrayList<>();
         this.active = true;
+        this.currentRoom = null;
     }
 
     /**
-     * Takes a turn — implemented differently by Human and AI players.
+     * Takes a turn — handles movement for this player. Implemented differently
+     * by Human (console input) and AI (random/strategic) players.
      * @param board the game board
+     * @param dice the dice to roll for movement
+     * @param allPlayers all players in the game (for corridor occupancy checks)
      */
-    public abstract void takeTurn(Board board);
+    public abstract void takeTurn(Board board, Dice dice, List<Player> allPlayers);
 
     /**
-     * Makes a suggestion — implemented differently by Human and AI players.
-     * @return a Suggestion object
+     * Makes a suggestion. The room must be the room the player is currently in.
+     * Returns null if the player chooses not to suggest or is not in a room.
+     * @return a Suggestion, or null if none made
      */
     public abstract Suggestion makeSuggestion();
+
+    /**
+     * Makes an accusation. Returns null if the player chooses not to accuse.
+     * A wrong accusation eliminates the player from active play.
+     * @return an Accusation, or null if none made
+     */
+    public abstract Accusation makeAccusation();
+
+    /**
+     * Called when this player must disprove a suggestion and holds one or more
+     * matching cards. The player chooses which card to reveal to the suggester.
+     * @param matchingCards the cards in this player's hand that match the suggestion
+     * @param askerName the name of the player who made the suggestion
+     * @return the card chosen to reveal
+     */
+    public abstract Card chooseSuggestionCard(List<Card> matchingCards, String askerName);
+
+    /**
+     * Called when another player shows this player a card to disprove a suggestion.
+     * Human players see the card printed; AI players record it in their notepad.
+     * @param card the card being shown
+     * @param fromPlayerName the name of the player showing the card
+     */
+    public abstract void seeDisprovalCard(Card card, String fromPlayerName);
 
     /**
      * Adds a card to this player's hand.
@@ -55,6 +88,24 @@ public abstract class Player {
      */
     public void addCard(Card card) {
         hand.add(card);
+    }
+
+    /**
+     * Returns all cards in this player's hand that match a suggestion.
+     * A card matches if its name equals the suspect, weapon or room name.
+     * @param suggestion the suggestion to check against
+     * @return list of matching cards (may be empty)
+     */
+    public List<Card> getMatchingCards(Suggestion suggestion) {
+        List<Card> matches = new ArrayList<>();
+        for (Card card : hand) {
+            if (card.getName().equals(suggestion.getSuspect().getName())
+                    || card.getName().equals(suggestion.getWeapon().getName())
+                    || card.getName().equals(suggestion.getRoom().getName())) {
+                matches.add(card);
+            }
+        }
+        return matches;
     }
 
     /**
@@ -67,6 +118,27 @@ public abstract class Player {
         this.col = col;
     }
 
+    /**
+     * Places the player inside a room. The player's grid position stays
+     * at the door they entered through but they are considered inside the room.
+     * @param room the room to enter
+     */
+    public void enterRoom(Room room) {
+        this.currentRoom = room;
+        room.addOccupant(name);
+    }
+
+    /**
+     * Removes the player from their current room so they can move
+     * through corridors again.
+     */
+    public void leaveRoom() {
+        if (currentRoom != null) {
+            currentRoom.removeOccupant(name);
+            currentRoom = null;
+        }
+    }
+
     public String getName() { return name; }
     public String getToken() { return token; }
     public int getRow() { return row; }
@@ -74,4 +146,5 @@ public abstract class Player {
     public List<Card> getHand() { return hand; }
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
+    public Room getCurrentRoom() { return currentRoom; }
 }
