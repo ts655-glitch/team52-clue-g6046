@@ -12,6 +12,7 @@ import com.cluegame.players.Player;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 
 /**
  * Top-level game controller. Manages turn order, game state and win condition.
@@ -43,12 +44,23 @@ public class Game {
     private boolean gameOver;
     private int turnCount;
     private Player winner;
+    private boolean multipleHumans;
+    private Scanner scanner;
 
     /**
      * Constructs a new Game with the given list of players.
      * @param players list of players (human and/or AI)
      */
     public Game(List<Player> players) {
+        this(players, new Scanner(System.in));
+    }
+
+    /**
+     * Constructs a new Game with the given list of players and a shared Scanner.
+     * @param players list of players (human and/or AI)
+     * @param scanner the Scanner for reading console input
+     */
+    public Game(List<Player> players, Scanner scanner) {
         this.players = players;
         this.board = new Board();
         this.dice = new Dice();
@@ -58,6 +70,14 @@ public class Game {
         this.gameOver = false;
         this.turnCount = 0;
         this.winner = null;
+        this.scanner = scanner;
+
+        // count human players to know if we need handoff screens
+        int humanCount = 0;
+        for (Player p : players) {
+            if (p instanceof HumanPlayer) humanCount++;
+        }
+        this.multipleHumans = humanCount > 1;
     }
 
     /**
@@ -77,11 +97,21 @@ public class Game {
         // show each human player their hand privately
         for (Player p : players) {
             if (p instanceof HumanPlayer) {
+                if (multipleHumans) {
+                    clearScreen();
+                    System.out.println(">>> " + p.getName()
+                            + ", press Enter to see your cards...");
+                    scanner.nextLine();
+                }
                 System.out.println(p.getName() + ", your cards are:");
                 for (Card card : p.getHand()) {
                     System.out.println("  " + card);
                 }
                 System.out.println();
+                if (multipleHumans) {
+                    System.out.println("Memorise your cards, then press Enter to continue.");
+                    scanner.nextLine();
+                }
             }
         }
 
@@ -160,8 +190,23 @@ public class Game {
      * Prints the current board state with player positions and a turn header.
      * Called at the start of each turn so players can see where everyone is.
      */
+    /**
+     * Prints the current board state with player positions and a turn header.
+     * If multiple humans are playing, shows a handoff screen before the next
+     * human's turn so the previous player's information is hidden.
+     */
     private void printStatus() {
         Player current = getCurrentPlayer();
+
+        // handoff screen between human players
+        if (multipleHumans && current instanceof HumanPlayer) {
+            clearScreen();
+            System.out.println(">>> Pass to " + current.getName()
+                    + " (" + current.getToken() + ")");
+            System.out.println(">>> Press Enter when ready...");
+            scanner.nextLine();
+        }
+
         System.out.println("\n------------------------------------------------------------");
         board.printBoard(players);
         System.out.println("------------------------------------------------------------");
@@ -346,6 +391,16 @@ public class Game {
         System.out.println("  Weapon:   " + murderEnvelope.getWeapon().getName());
         System.out.println("  Room:     " + murderEnvelope.getRoom().getName());
         System.out.println("\nThanks for playing Clue!");
+    }
+
+    /**
+     * Prints blank lines to push previous content off the visible terminal.
+     * Used for privacy between human players on a shared screen.
+     */
+    private void clearScreen() {
+        for (int i = 0; i < 50; i++) {
+            System.out.println();
+        }
     }
 
     /**

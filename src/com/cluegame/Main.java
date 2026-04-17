@@ -75,8 +75,8 @@ public class Main {
                     + " as " + characterNames[i] + " [" + type + "]");
         }
 
-        // create and run the game
-        Game game = new Game(players);
+        // create and run the game — pass the shared scanner
+        Game game = new Game(players, scanner);
         game.run();
     }
 
