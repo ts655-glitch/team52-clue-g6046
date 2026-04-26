@@ -11,7 +11,9 @@ import com.cluegame.players.HumanPlayer;
 import com.cluegame.players.Player;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 
 /**
@@ -30,9 +32,31 @@ public class Game {
         "Scarlett", "Mustard", "White", "Green", "Peacock", "Plum"
     };
 
-    // starting squares for up to 6 players [row][col]
+    // starting squares indexed by character order (Scarlett=0 .. Plum=5)
     private static final int[][] START_POSITIONS = {
-        {0, 16}, {7, 24}, {23, 16}, {23, 7}, {18, 0}, {5, 0}
+        {0, 16}, {7, 23}, {24, 14}, {24, 9}, {18, 0}, {5, 0}
+    };
+
+    /**
+     * Returns the start position for a given token name.
+     * @param token the short token name (e.g. "Scarlett", "Mustard")
+     * @return {row, col} for that character's start, or {0,0} if unknown
+     */
+    public static int[] getStartPositionForToken(String token) {
+        for (int i = 0; i < TOKEN_NAMES.length; i++) {
+            if (TOKEN_NAMES[i].equals(token)) return START_POSITIONS[i];
+        }
+        return new int[]{0, 0};
+    }
+
+    private static final String[] WEAPON_NAMES = {
+        "Candlestick", "Dagger", "Lead Piping",
+        "Revolver", "Rope", "Spanner"
+    };
+
+    private static final String[] WEAPON_START_ROOMS = {
+        "Kitchen", "Ballroom", "Conservatory",
+        "Billiard Room", "Library", "Study"
     };
 
     private Board board;
@@ -46,6 +70,12 @@ public class Game {
     private Player winner;
     private boolean multipleHumans;
     private Scanner scanner;
+
+    // non-player suspect pieces (suspects not controlled by any player)
+    private Map<String, int[]> nonPlayerSuspects;
+
+    // weapon token positions: weapon name -> room name
+    private Map<String, String> weaponPositions;
 
     /**
      * Constructs a new Game with the given list of players.
@@ -70,6 +100,8 @@ public class Game {
         this.gameOver = false;
         this.turnCount = 0;
         this.winner = null;
+        this.nonPlayerSuspects = new HashMap<>();
+        this.weaponPositions = new HashMap<>();
         this.scanner = scanner;
 
         // count human players to know if we need handoff screens
@@ -180,9 +212,44 @@ public class Game {
             }
         }
 
-        // place each player on their starting square
+        // place each player on their character's starting square
+        for (Player p : players) {
+            int[] start = getStartPositionForToken(p.getToken());
+            p.moveTo(start[0], start[1]);
+        }
+
+        // place non-player suspect pieces on their starting squares
+        // (all 6 suspects exist on the board even if fewer than 6 players)
+        for (int i = 0; i < TOKEN_NAMES.length; i++) {
+            boolean isPlayer = false;
+            for (Player p : players) {
+                if (p.getToken().equals(TOKEN_NAMES[i])) { isPlayer = true; break; }
+            }
+            if (!isPlayer) {
+                nonPlayerSuspects.put(TOKEN_NAMES[i], START_POSITIONS[i].clone());
+            }
+        }
+
+        // place weapon tokens in starting rooms
+        for (int i = 0; i < WEAPON_NAMES.length; i++) {
+            weaponPositions.put(WEAPON_NAMES[i], WEAPON_START_ROOMS[i]);
+        }
+
+        // Miss Scarlett goes first (classic rule)
+        determineFirstPlayer();
+    }
+
+    /**
+     * Sets the first player to whoever holds the Scarlett token.
+     * If no player is Scarlett, the first player in the list goes first.
+     */
+    private void determineFirstPlayer() {
+        currentPlayerIndex = 0;
         for (int i = 0; i < players.size(); i++) {
-            players.get(i).moveTo(START_POSITIONS[i][0], START_POSITIONS[i][1]);
+            if (players.get(i).getToken().equals("Scarlett")) {
+                currentPlayerIndex = i;
+                return;
+            }
         }
     }
 
@@ -436,4 +503,34 @@ public class Game {
     public Dice getDice() { return dice; }
     public MurderEnvelope getMurderEnvelope() { return murderEnvelope; }
     public int getTurnCount() { return turnCount; }
+    public Map<String, int[]> getNonPlayerSuspects() { return nonPlayerSuspects; }
+    public Map<String, String> getWeaponPositions() { return weaponPositions; }
+    public static String[] getWeaponNames() { return WEAPON_NAMES; }
+
+    /**
+     * Moves a weapon token to a room (used during suggestion resolution).
+     * @param weaponName the weapon to move
+     * @param roomName the room to move it to
+     */
+    public void moveWeaponToRoom(String weaponName, String roomName) {
+        weaponPositions.put(weaponName, roomName);
+    }
+
+    /**
+     * Moves a non-player suspect piece into a room by name.
+     * Called when a suggestion names a suspect who is not an active player.
+     * @param token the suspect's token name
+     * @param room the room to move into
+     */
+    public void moveNonPlayerSuspect(String token, Room room) {
+        // non-player suspects don't have a Room reference, just track position
+        // by moving them to a cell inside the room
+        if (nonPlayerSuspects.containsKey(token)) {
+            // place at the room's first door position as a proxy
+            if (!room.getDoors().isEmpty()) {
+                Square door = room.getDoors().get(0);
+                nonPlayerSuspects.put(token, new int[]{door.getRow(), door.getCol()});
+            }
+        }
+    }
 }

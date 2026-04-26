@@ -1,5 +1,5 @@
 <component name="libraryTable">
-  <library name="junit.jupiter" type="repository">
+  <library name="/Applications/javafx-sdk-21.0.11/lib" type="repository">
     <properties maven-id="org.junit.jupiter:junit-jupiter:5.10.0" />
     <CLASSES>
       <root url="jar://$MAVEN_REPOSITORY$/org/junit/jupiter/junit-jupiter/5.10.0/junit-jupiter-5.10.0.jar!/" />
