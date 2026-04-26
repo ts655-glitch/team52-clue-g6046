@@ -62,16 +62,17 @@ public class MovementTest {
      */
     @Test
     public void testPlayerInRoomDoesNotBlockCorridor() {
-        Player alice = new AIPlayer("Alice", "Scarlett", 5, 3);
-        Player bob = new AIPlayer("Bob", "Mustard", 4, 3);
+        // Study door is now at (4,6)
+        Player alice = new AIPlayer("Alice", "Scarlett", 4, 6);
+        Player bob = new AIPlayer("Bob", "Mustard", 4, 7);
         players.add(alice);
         players.add(bob);
 
-        // alice is at (5,3) which is the Study door — put her in the room
+        // alice is at (4,6) which is the Study door — put her in the room
         alice.enterRoom(board.getRoom("Study"));
 
-        // bob at (4,3) should be able to move south to (5,3) since alice is "in the room"
-        assertTrue(board.isValidMove(4, 3, 5, 3, players),
+        // bob at (4,7) should be able to move west to (4,6) since alice is "in the room"
+        assertTrue(board.isValidMove(4, 7, 4, 6, players),
                 "Player in a room should not block the door corridor square");
     }
 
@@ -94,17 +95,12 @@ public class MovementTest {
      */
     @Test
     public void testCannotMoveIntoRoomSquareDirectly() {
-        Player p = new AIPlayer("Test", "Scarlett", 5, 7);
+        // Billiard Room is rows 12-16, cols 0-5.
+        // (14, 6) is corridor, (14, 5) is Billiard Room interior.
+        Player p = new AIPlayer("Test", "Scarlett", 14, 6);
         players.add(p);
 
-        // (5,7) is corridor, (5,8) is... let's check. Hall is rows 0-5, cols 9-14.
-        // So (5,8) should be corridor. Let's use a spot next to a known room square.
-        // Library is rows 7-11, cols 0-5. (6,0) is blocked. (7,6) is corridor, (7,5) is Library room.
-        // Player at (7,6) trying to move west to (7,5) which is inside Library — should be blocked.
-        Player p2 = new AIPlayer("Test2", "Mustard", 7, 6);
-        players.add(p2);
-
-        assertFalse(board.isValidMove(7, 6, 7, 5, players),
+        assertFalse(board.isValidMove(14, 6, 14, 5, players),
                 "Should not be able to walk directly into a room square");
     }
 
@@ -113,7 +109,8 @@ public class MovementTest {
      */
     @Test
     public void testEnterRoomSetsCurrentRoom() {
-        Player p = new AIPlayer("Test", "Scarlett", 5, 3);
+        // Study door is at (4,6)
+        Player p = new AIPlayer("Test", "Scarlett", 4, 6);
         players.add(p);
 
         Room study = board.getRoom("Study");
@@ -132,7 +129,7 @@ public class MovementTest {
      */
     @Test
     public void testLeaveRoomClearsCurrentRoom() {
-        Player p = new AIPlayer("Test", "Scarlett", 5, 3);
+        Player p = new AIPlayer("Test", "Scarlett", 4, 6);
         Room study = board.getRoom("Study");
         p.enterRoom(study);
 
@@ -148,7 +145,7 @@ public class MovementTest {
      */
     @Test
     public void testAllStartPositionsHaveValidMoves() {
-        int[][] starts = {{0, 16}, {7, 24}, {23, 16}, {23, 7}, {18, 0}, {5, 0}};
+        int[][] starts = {{0, 16}, {7, 23}, {24, 14}, {24, 9}, {18, 0}, {5, 0}};
         int[] dRow = {-1, 1, 0, 0};
         int[] dCol = {0, 0, -1, 1};
 

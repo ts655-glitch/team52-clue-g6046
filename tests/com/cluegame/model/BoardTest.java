@@ -45,12 +45,12 @@ public class BoardTest {
 
     /**
      * Validates FR13 — players cannot move onto blocked squares.
-     * The central staircase area (row 10, col 11) is blocked.
+     * The central staircase area (row 10, col 10) is blocked.
      */
     @Test
     public void testIsValidMoveReturnsFalseForBlocked() {
-        // (9, 11) is a corridor next to the staircase, (10, 11) is blocked
-        assertFalse(board.isValidMove(9, 11, 10, 11),
+        // (7, 9) is a corridor next to the staircase, (8, 9) is blocked
+        assertFalse(board.isValidMove(7, 9, 8, 9),
                 "Should not be able to move onto a blocked square");
     }
 
@@ -61,11 +61,11 @@ public class BoardTest {
     public void testIsValidMoveReturnsFalseForOutOfBounds() {
         assertFalse(board.isValidMove(0, 16, -1, 16),
                 "Should not be able to move above the board");
-        assertFalse(board.isValidMove(23, 7, 24, 7),
+        assertFalse(board.isValidMove(24, 9, 25, 9),
                 "Should not be able to move below the board");
         assertFalse(board.isValidMove(7, 0, 7, -1),
                 "Should not be able to move left of the board");
-        assertFalse(board.isValidMove(7, 24, 7, 25),
+        assertFalse(board.isValidMove(7, 23, 7, 24),
                 "Should not be able to move right of the board");
     }
 
@@ -127,13 +127,13 @@ public class BoardTest {
 
     /**
      * Validates FR14 — door squares are correctly identified by isDoor().
-     * The Study door at (5, 3) should be detected as a door.
+     * The Study door at (4, 6) should be detected as a door.
      */
     @Test
     public void testIsDoorDetectsDoorSquares() {
-        assertTrue(board.isDoor(5, 3), "Study door at (5,3) should be identified as a door");
+        assertTrue(board.isDoor(4, 6), "Study door at (4,6) should be identified as a door");
         assertFalse(board.isDoor(1, 16), "Plain corridor at (1,16) should not be a door");
-        assertFalse(board.isDoor(10, 11), "Blocked square should not be a door");
+        assertFalse(board.isDoor(8, 9), "Blocked square should not be a door");
     }
 
     /**

@@ -31,23 +31,38 @@ public class GameFlowTest {
     }
 
     /**
-     * Validates FR6 — Miss Scarlett goes first. The first player in the list
-     * should be placed at Scarlett's starting position (0, 16).
+     * Validates FR6 — Miss Scarlett always goes first (classic rule).
      */
     @Test
-    public void testMissScarlettGoesFirst() {
+    public void testScarlettGoesFirst() {
+        players.add(new AIPlayer("Bob", "Mustard", 0, 0));
+        players.add(new AIPlayer("Alice", "Scarlett", 0, 0));
+        game = new Game(players);
+        game.startGame();
+
+        Player first = game.getCurrentPlayer();
+        assertEquals("Scarlett", first.getToken(),
+                "Scarlett should go first regardless of list order");
+    }
+
+    /**
+     * Validates that Scarlett's token is placed at Scarlett's start position
+     * regardless of player list order.
+     */
+    @Test
+    public void testScarlettStartPosition() {
         players.add(new AIPlayer("Alice", "Scarlett", 0, 0));
         players.add(new AIPlayer("Bob", "Mustard", 0, 0));
         game = new Game(players);
         game.startGame();
 
-        Player first = game.getCurrentPlayer();
-        assertEquals("Alice", first.getName(),
-                "First player should be the one assigned Scarlett");
-        assertEquals(0, first.getRow(),
-                "Scarlett should start at row 0");
-        assertEquals(16, first.getCol(),
-                "Scarlett should start at column 16");
+        Player scarlett = null;
+        for (Player p : players) {
+            if (p.getToken().equals("Scarlett")) scarlett = p;
+        }
+        assertNotNull(scarlett);
+        assertEquals(0, scarlett.getRow(), "Scarlett should start at row 0");
+        assertEquals(16, scarlett.getCol(), "Scarlett should start at col 16");
     }
 
     /**
@@ -207,8 +222,8 @@ public class GameFlowTest {
     }
 
     /**
-     * Validates FR6 — players are placed at their correct starting positions
-     * after startGame is called.
+     * Validates FR6 — each player is placed at the start position that
+     * matches their chosen character token, not their list index.
      */
     @Test
     public void testPlayersAtCorrectStartPositions() {
@@ -218,13 +233,22 @@ public class GameFlowTest {
         game = new Game(players);
         game.startGame();
 
-        // expected start positions from Game.START_POSITIONS
-        int[][] expected = {{0, 16}, {7, 24}, {23, 16}};
-        for (int i = 0; i < 3; i++) {
-            assertEquals(expected[i][0], players.get(i).getRow(),
-                    "Player " + (i+1) + " should be at row " + expected[i][0]);
-            assertEquals(expected[i][1], players.get(i).getCol(),
-                    "Player " + (i+1) + " should be at col " + expected[i][1]);
+        // verify each player is at their character's start position
+        String[][] expected = {
+            {"Scarlett", "0", "16"},
+            {"Mustard", "7", "23"},
+            {"White", "24", "14"}
+        };
+        for (String[] exp : expected) {
+            Player p = null;
+            for (Player pl : players) {
+                if (pl.getToken().equals(exp[0])) { p = pl; break; }
+            }
+            assertNotNull(p, exp[0] + " should exist");
+            assertEquals(Integer.parseInt(exp[1]), p.getRow(),
+                    exp[0] + " should be at row " + exp[1]);
+            assertEquals(Integer.parseInt(exp[2]), p.getCol(),
+                    exp[0] + " should be at col " + exp[2]);
         }
     }
 
@@ -244,5 +268,86 @@ public class GameFlowTest {
             assertTrue(roll >= 2 && roll <= 12,
                     "Dice roll should be between 2 and 12, got " + roll);
         }
+    }
+
+    /**
+     * Validates that start positions are based on token, not list order.
+     * If Mustard is listed first and Scarlett second, each should still
+     * start at their own character's position.
+     */
+    @Test
+    public void testStartPositionsByTokenNotIndex() {
+        // deliberately put Mustard first in the list
+        players.add(new AIPlayer("First", "Mustard", 0, 0));
+        players.add(new AIPlayer("Second", "Scarlett", 0, 0));
+        game = new Game(players);
+        game.startGame();
+
+        Player mustard = null;
+        Player scarlett = null;
+        for (Player p : players) {
+            if (p.getToken().equals("Mustard")) mustard = p;
+            if (p.getToken().equals("Scarlett")) scarlett = p;
+        }
+
+        // Mustard should be at Mustard's start (7,23), not Scarlett's (0,16)
+        assertEquals(7, mustard.getRow(), "Mustard should start at row 7");
+        assertEquals(23, mustard.getCol(), "Mustard should start at col 23");
+        // Scarlett should be at Scarlett's start (0,16), not Mustard's (7,23)
+        assertEquals(0, scarlett.getRow(), "Scarlett should start at row 0");
+        assertEquals(16, scarlett.getCol(), "Scarlett should start at col 16");
+    }
+
+    /**
+     * Validates that non-player suspect pieces exist for characters
+     * not assigned to any player.
+     */
+    @Test
+    public void testNonPlayerSuspectsExist() {
+        players.add(new AIPlayer("A", "Scarlett", 0, 0));
+        players.add(new AIPlayer("B", "Mustard", 0, 0));
+        game = new Game(players);
+        game.startGame();
+
+        // 6 characters total, 2 are players, so 4 non-player suspects
+        assertEquals(4, game.getNonPlayerSuspects().size(),
+                "Should have 4 non-player suspect pieces");
+        assertTrue(game.getNonPlayerSuspects().containsKey("White"),
+                "Mrs White should be a non-player suspect");
+        assertTrue(game.getNonPlayerSuspects().containsKey("Green"),
+                "Rev Green should be a non-player suspect");
+    }
+
+    /**
+     * Validates that weapon tokens are placed in starting rooms.
+     */
+    @Test
+    public void testWeaponsStartInRooms() {
+        players.add(new AIPlayer("A", "Scarlett", 0, 0));
+        players.add(new AIPlayer("B", "Mustard", 0, 0));
+        game = new Game(players);
+        game.startGame();
+
+        assertEquals(6, game.getWeaponPositions().size(),
+                "Should have 6 weapon tokens");
+        for (String weapon : Game.getWeaponNames()) {
+            assertNotNull(game.getWeaponPositions().get(weapon),
+                    weapon + " should be in a room");
+        }
+    }
+
+    /**
+     * Validates that moveWeaponToRoom changes the weapon's location.
+     */
+    @Test
+    public void testWeaponMovedBySuggestion() {
+        players.add(new AIPlayer("A", "Scarlett", 0, 0));
+        players.add(new AIPlayer("B", "Mustard", 0, 0));
+        game = new Game(players);
+        game.startGame();
+
+        game.moveWeaponToRoom("Rope", "Hall");
+        assertEquals("Hall", game.getWeaponPositions().get("Rope"),
+                "Rope should now be in the Hall");
     }
 }

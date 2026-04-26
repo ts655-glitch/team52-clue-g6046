@@ -16,8 +16,8 @@ import java.util.Map;
  */
 public class Board {
 
-    public static final int ROWS = 24;
-    public static final int COLS = 25;
+    public static final int ROWS = 25;
+    public static final int COLS = 24;
 
     private Square[][] grid;
     private Map<String, Room> rooms;
@@ -64,67 +64,78 @@ public class Board {
             }
         }
 
-        // --- Room layouts (matching classic Clue! board) ---
+        // --- Room layouts (25 rows x 24 cols, matching board.png) ---
         //
         //  Study(TL)        Hall(TC)        Lounge(TR)
         //  Library(ML)      [staircase]     Dining Room(MR)
         //  Billiard(ML)
         //  Conservatory(BL) Ballroom(BC)    Kitchen(BR)
 
-        fillRoom("Study", 0, 0, 4, 6);
-        fillRoom("Hall", 0, 9, 5, 14);
-        fillRoom("Lounge", 0, 18, 4, 24);
-        fillRoom("Library", 7, 0, 11, 5);
-        fillRoom("Billiard Room", 13, 0, 17, 5);
-        fillRoom("Dining Room", 9, 17, 14, 24);
-        fillRoom("Conservatory", 19, 0, 23, 5);
-        fillRoom("Ballroom", 18, 8, 23, 15);
-        fillRoom("Kitchen", 18, 18, 23, 24);
+        fillRoom("Study",          0, 0,  3,  6);  // rows 0-3,   cols 0-6
+        fillRoom("Hall",           0, 9,  6, 14);  // rows 0-6,   cols 9-14
+        fillRoom("Lounge",         0, 17, 5, 23);  // rows 0-5,   cols 17-23
+        fillRoom("Library",        6, 0, 10,  6);  // rows 6-10,  cols 0-6
+        grid[6][6] = new Square(6, 6, Square.Type.CORRIDOR);   // (6,6) is corridor
+        grid[10][6] = new Square(10, 6, Square.Type.CORRIDOR); // (10,6) is corridor
+        fillBlocked(6, 0, 6, 0);   // (6,0) wall between Study and Library
+        fillBlocked(10, 0, 10, 0); // (10,0) wall between Library and corridor
+        fillRoom("Billiard Room", 12, 0, 16,  5);  // rows 12-16, cols 0-5
+        fillRoom("Dining Room",    9, 16, 14, 23);  // rows 9-14,  cols 16-23
+        fillRoom("Conservatory",  19, 0, 23,  5);  // rows 19-23, cols 0-5 (row 24 excluded)
+        fillBlocked(19, 0, 19, 0); // (19,0) wall between Billiard and Conservatory
+        fillRoom("Ballroom",      17, 8, 22, 15);  // rows 17-22, cols 8-15
+        fillRoom("Kitchen",       18, 18, 23, 23);  // rows 18-23, cols 18-23 (row 24 excluded)
 
         // --- Central staircase (blocked, not accessible) ---
-        fillBlocked(10, 11, 13, 13);
+        fillBlocked(8, 9, 14, 13);
 
         // --- Blocked wall squares along board edges ---
 
         // top edge between rooms
-        fillBlocked(0, 7, 0, 8);
-        fillBlocked(0, 15, 0, 17);
+        fillBlocked(0, 8, 0, 8);       // between Study and Hall (0,7 is corridor)
+        fillBlocked(0, 15, 0, 16);     // between Hall and Lounge
         // left edge between rooms
-        fillBlocked(5, 0, 6, 0);     // between Study and Library
-        fillBlocked(12, 0, 12, 0);   // between Library and Billiard Room
-        fillBlocked(18, 0, 18, 0);   // between Billiard Room and Conservatory
+        fillBlocked(4, 0, 4, 0);       // between Study and Plum start
+        fillBlocked(11, 0, 11, 0);     // between Library and Billiard Room
+        fillBlocked(17, 0, 18, 0);     // between Billiard Room and Conservatory
         // right edge between rooms
-        fillBlocked(5, 24, 8, 24);   // between Lounge and Dining Room
-        fillBlocked(15, 24, 17, 24); // below Dining Room
+        fillBlocked(6, 23, 8, 23);     // between Lounge and Dining Room
+        fillBlocked(16, 23, 16, 23);   // between Dining Room and Kitchen (17,23 is corridor)
         // bottom edge between rooms
-        fillBlocked(23, 6, 23, 7);   // between Conservatory and Ballroom
-        fillBlocked(23, 16, 23, 17); // between Ballroom and Kitchen
+        fillBlocked(23, 6, 23, 6);     // between Conservatory and Ballroom (23,7 is corridor)
+        fillBlocked(23, 17, 23, 17);   // between Ballroom and Kitchen (23,16 is corridor)
+        // bottom row (row 24) — mostly wall, only start squares are open
+        fillBlocked(24, 0, 24, 8);     // below Conservatory + left of Green start
+        fillBlocked(24, 10, 24, 13);   // between Green and White starts
+        fillBlocked(24, 15, 24, 23);   // right of White start + below Kitchen
 
         // --- Door squares (corridor squares adjacent to rooms) ---
 
-        addDoor("Study", 5, 3);          // south side
-        addDoor("Hall", 6, 11);          // south-left
-        addDoor("Hall", 6, 12);          // south-right
-        addDoor("Lounge", 5, 18);        // south side
-        addDoor("Library", 6, 3);        // north side
-        addDoor("Library", 12, 3);       // south side
-        addDoor("Billiard Room", 12, 1); // north side
-        addDoor("Billiard Room", 18, 3); // south side
-        addDoor("Dining Room", 11, 16);  // west side
-        addDoor("Dining Room", 15, 20);  // south side
-        addDoor("Conservatory", 18, 4);  // north side
-        addDoor("Ballroom", 17, 9);      // north-left
-        addDoor("Ballroom", 17, 14);     // north-right
-        addDoor("Kitchen", 17, 20);      // north side
+        addDoor("Study",          4,  6);  // south-right exit
+        addDoor("Hall",           7, 11);  // south-left
+        addDoor("Hall",           7, 12);  // south-right
+        addDoor("Hall",           4,  8);  // west side
+        addDoor("Lounge",         6, 17);  // south-left exit
+        addDoor("Library",        8,  7);  // east side
+        addDoor("Library",       11,  3);  // south
+        addDoor("Billiard Room", 15,  6);  // east side
+        addDoor("Dining Room",   12, 15);  // west side
+        addDoor("Dining Room",    8, 17);  // north side
+        addDoor("Conservatory",  19,  5);  // north-east
+        addDoor("Ballroom",      16,  9);  // north-left
+        addDoor("Ballroom",      16, 14);  // north-right
+        addDoor("Ballroom",      19,  7);  // west side
+        addDoor("Ballroom",      19, 16);  // east side
+        addDoor("Kitchen",       17, 19);  // north
 
         // --- Starting positions for 6 players ---
-        // Matches classic board layout (see board image)
-        setStart(0, 16);  // Miss Scarlett (top, between Hall and Lounge)
-        setStart(7, 24);  // Colonel Mustard (right, between Lounge and Dining Room)
-        setStart(23, 16); // Mrs White (bottom-right, near Kitchen)
-        setStart(23, 7);  // Reverend Green (bottom-left, near Conservatory)
-        setStart(18, 0);  // Mrs Peacock (left, between Billiard Room and Conservatory)
-        setStart(5, 0);   // Professor Plum (left, between Study and Library)
+        // Matches board.png start markers
+        setStart( 0, 16);   // Miss Scarlett  (top, between Hall and Lounge)
+        setStart( 7, 23);   // Colonel Mustard (right, between Lounge and Dining)
+        setStart(24, 14);   // Mrs White      (bottom, between Ballroom and Kitchen)
+        setStart(24,  9);   // Reverend Green (bottom, between Conservatory and Ballroom)
+        setStart(18,  0);   // Mrs Peacock    (left, between Billiard and Conservatory)
+        setStart( 5,  0);   // Professor Plum (left, between Study and Library)
     }
 
     /**
