@@ -50,6 +50,9 @@ public class GameController {
     private boolean gameOver;
     private Player winner;
 
+    // tracks the last room each AI exited, to prevent immediate re-entry
+    private java.util.Map<String, String> aiLastExitedRoom = new java.util.HashMap<>();
+
     /**
      * Creates a controller for the given game state.
      * @param game the Game instance (provides board, dice, players, envelope,
@@ -291,19 +294,25 @@ public class GameController {
             gameOver = true;
         } else {
             accuser.setActive(false);
+            // check if any active players remain
             int activeCount = 0;
-            Player lastActive = null;
             for (Player p : players) {
-                if (p.isActive()) { activeCount++; lastActive = p; }
+                if (p.isActive()) activeCount++;
             }
-            if (activeCount <= 1) { winner = lastActive; gameOver = true; }
+            if (activeCount == 0) {
+                // everyone eliminated — no one solved the mystery
+                winner = null;
+                gameOver = true;
+            }
+            // if one player remains, the game continues — they must still
+            // make a correct accusation to win (standard Clue rules)
         }
         return correct;
     }
 
     // --- AI turn ---
 
-    /** Tracks which room the AI just left, to avoid re-entering immediately. */
+    /** Current AI's last exited room for the active turn. */
     private String lastExitedRoom;
 
     /**
@@ -317,13 +326,15 @@ public class GameController {
         if (!(current instanceof AIPlayer) || !current.isActive()) return log;
 
         AIPlayer ai = (AIPlayer) current;
-        lastExitedRoom = null;
+        // restore this AI's persisted last-exited room
+        lastExitedRoom = aiLastExitedRoom.get(ai.getName());
         log.add("--- " + ai.getName() + "'s turn ---");
 
         // movement phase
         if (ai.getCurrentRoom() != null) {
             Room room = ai.getCurrentRoom();
             lastExitedRoom = room.getName();
+            aiLastExitedRoom.put(ai.getName(), lastExitedRoom);
 
             // use secret passage only sometimes (1 in 3 chance),
             // to prevent bouncing between the same two rooms
@@ -333,7 +344,8 @@ public class GameController {
                 ai.enterRoom(dest);
                 log.add(ai.getName() + " uses the secret passage to "
                         + dest.getName() + ".");
-                lastExitedRoom = null; // entered a new room via passage
+                lastExitedRoom = null;
+                aiLastExitedRoom.remove(ai.getName());
             } else {
                 // exit through a free door
                 Square freeDoor = null;
@@ -355,6 +367,10 @@ public class GameController {
 
         // suggestion phase
         if (ai.getCurrentRoom() != null && ai.isActive()) {
+            // mark the current room as seen (AI knows this room is not in envelope
+            // if it holds the room card, or it will learn through suggestions)
+            ai.getNotepad().markSeen(ai.getCurrentRoom().getName());
+
             Suggestion suggestion = ai.makeSuggestion();
             if (suggestion != null) {
                 log.add(ai.getName() + " suggests: " + suggestion);
@@ -379,6 +395,8 @@ public class GameController {
                             result.getDisproverName());
                 } else {
                     log.add("No one could disprove the suggestion!");
+                    // strong signal — save as a future accusation candidate
+                    ai.setUndisprovedSuggestion(suggestion);
                 }
 
                 // accusation phase
@@ -409,6 +427,9 @@ public class GameController {
         int roll = dice.roll();
         log.add(ai.getName() + " rolled a " + roll + ".");
 
+        int startRow = ai.getRow();
+        int startCol = ai.getCol();
+
         for (int step = 0; step < roll; step++) {
             // if standing on a door to a NEW room, enter it
             if (board.isDoor(ai.getRow(), ai.getCol())) {
@@ -417,6 +438,7 @@ public class GameController {
                         && room.getName().equals(lastExitedRoom);
                 if (!isOldRoom) {
                     ai.enterRoom(room);
+                    aiLastExitedRoom.remove(ai.getName());
                     log.add(ai.getName() + " entered the "
                             + room.getName() + ".");
                     return;
@@ -435,8 +457,18 @@ public class GameController {
             if (lastExitedRoom == null
                     || !room.getName().equals(lastExitedRoom)) {
                 ai.enterRoom(room);
+                aiLastExitedRoom.remove(ai.getName());
                 log.add(ai.getName() + " entered the " + room.getName() + ".");
+                return;
             }
+        }
+
+        // safety valve: if the AI made no progress (still at start position
+        // or still on the old room's door), clear the lastExitedRoom restriction
+        // so next turn it can enter the nearest room even if it's the old one
+        if (ai.getRow() == startRow && ai.getCol() == startCol) {
+            aiLastExitedRoom.remove(ai.getName());
+            lastExitedRoom = null;
         }
     }
 
@@ -449,7 +481,7 @@ public class GameController {
         Square target = findNearestDoor(ai);
 
         List<int[]> validDirs = new ArrayList<>();
-        int[] bestDir = null;
+        List<int[]> bestDirs = new ArrayList<>();
         int bestDist = Integer.MAX_VALUE;
 
         for (int[] d : directions) {
@@ -460,46 +492,87 @@ public class GameController {
                 if (target != null) {
                     int dist = Math.abs(nr - target.getRow())
                              + Math.abs(nc - target.getCol());
-                    if (dist < bestDist) { bestDist = dist; bestDir = d; }
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        bestDirs.clear();
+                        bestDirs.add(d);
+                    } else if (dist == bestDist) {
+                        bestDirs.add(d);
+                    }
                 }
             }
         }
 
-        if (bestDir != null) return bestDir;
-        if (!validDirs.isEmpty()) return validDirs.get(0);
+        // pick randomly among tied best directions to avoid oscillation
+        if (!bestDirs.isEmpty()) {
+            return bestDirs.get((int) (Math.random() * bestDirs.size()));
+        }
+        if (!validDirs.isEmpty()) {
+            return validDirs.get((int) (Math.random() * validDirs.size()));
+        }
         return null;
     }
 
     /**
-     * Finds the nearest room door, excluding the room the AI just exited.
-     * This prevents the AI from immediately re-entering the same room.
+     * Finds the best room door for the AI to head toward. Prioritises:
+     * 1. Nearest door to an unseen/unvisited room (excluding just-exited)
+     * 2. Nearest door to any room (excluding just-exited)
+     * 3. Any door at all (fallback)
+     * This encourages the AI to explore the full board before revisiting.
      */
     private Square findNearestDoor(Player ai) {
-        Square nearest = null;
-        int minDist = Integer.MAX_VALUE;
+        java.util.Set<String> seenRooms = java.util.Collections.emptySet();
+        if (ai instanceof AIPlayer) {
+            seenRooms = ((AIPlayer) ai).getNotepad().getSeenCards();
+        }
+
+        Square nearestUnseen = null;
+        int minUnseenDist = Integer.MAX_VALUE;
+        Square nearestSeen = null;
+        int minSeenDist = Integer.MAX_VALUE;
+
         for (Room room : board.getRooms().values()) {
-            // skip doors to the room we just left
+            // skip the room we just left this turn
             if (lastExitedRoom != null
                     && room.getName().equals(lastExitedRoom)) {
                 continue;
             }
+
+            boolean visited = seenRooms.contains(room.getName());
+
             for (Square door : room.getDoors()) {
                 int dist = Math.abs(ai.getRow() - door.getRow())
                          + Math.abs(ai.getCol() - door.getCol());
-                if (dist < minDist) { minDist = dist; nearest = door; }
-            }
-        }
-        // fallback: if no other room found, allow any door
-        if (nearest == null) {
-            for (Room room : board.getRooms().values()) {
-                for (Square door : room.getDoors()) {
-                    int dist = Math.abs(ai.getRow() - door.getRow())
-                             + Math.abs(ai.getCol() - door.getCol());
-                    if (dist < minDist) { minDist = dist; nearest = door; }
+
+                if (!visited && dist < minUnseenDist) {
+                    minUnseenDist = dist;
+                    nearestUnseen = door;
+                } else if (visited && dist < minSeenDist) {
+                    minSeenDist = dist;
+                    nearestSeen = door;
                 }
             }
         }
-        return nearest;
+
+        // prefer unseen rooms to encourage exploration
+        if (nearestUnseen != null) return nearestUnseen;
+        if (nearestSeen != null) return nearestSeen;
+
+        // fallback: if nothing found (all doors blocked by lastExitedRoom),
+        // allow any door
+        Square fallback = null;
+        int fallbackDist = Integer.MAX_VALUE;
+        for (Room room : board.getRooms().values()) {
+            for (Square door : room.getDoors()) {
+                int dist = Math.abs(ai.getRow() - door.getRow())
+                         + Math.abs(ai.getCol() - door.getCol());
+                if (dist < fallbackDist) {
+                    fallbackDist = dist;
+                    fallback = door;
+                }
+            }
+        }
+        return fallback;
     }
 
     // --- Turn advancement ---

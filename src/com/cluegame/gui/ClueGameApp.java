@@ -4,6 +4,7 @@ import com.cluegame.model.Game;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 
 /**
@@ -32,7 +33,7 @@ public class ClueGameApp extends Application {
         SetupView setup = new SetupView(this::startGame);
 
         // wrap in a centered container so the form panel doesn't stretch
-        javafx.scene.layout.StackPane wrapper = new javafx.scene.layout.StackPane(setup);
+        StackPane wrapper = new StackPane(setup);
         wrapper.setStyle("-fx-background-color: #1a1a2e;");
 
         Scene scene = new Scene(wrapper, 620, 480);

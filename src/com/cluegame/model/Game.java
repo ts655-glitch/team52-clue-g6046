@@ -396,21 +396,17 @@ public class Game {
     }
 
     /**
-     * Advances currentPlayerIndex to the next active player. If only one
-     * (or zero) active players remain, declares a winner and ends the game.
+     * Advances currentPlayerIndex to the next active player. If no active
+     * players remain, ends the game with no winner.
      */
     private void advanceToNextPlayer() {
         long activeCount = 0;
-        Player lastActive = null;
         for (Player p : players) {
-            if (p.isActive()) {
-                activeCount++;
-                lastActive = p;
-            }
+            if (p.isActive()) activeCount++;
         }
 
-        if (activeCount <= 1) {
-            winner = lastActive;
+        if (activeCount == 0) {
+            winner = null;
             gameOver = true;
             return;
         }

@@ -42,7 +42,7 @@ public class BoardView extends Pane {
     private static final double CELL_H = 48.0;
 
     /** Set to true to draw the debug grid overlay with cell types. */
-    private static final boolean DEBUG_OVERLAY = true;
+    private static final boolean DEBUG_OVERLAY = false;
 
     /**
      * Returns the display colour for a player based on their character token.

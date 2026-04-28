@@ -40,6 +40,9 @@ public class AIPlayer extends Player {
 
     private Random random;
     private DetectiveNotepad notepad;
+    private String lastSuggestedSuspect;
+    private String lastSuggestedWeapon;
+    private Suggestion undisprovedSuggestion;
 
     /**
      * Constructs an AI player with a name, token and starting position.
@@ -52,6 +55,9 @@ public class AIPlayer extends Player {
         super(name, token, startRow, startCol);
         this.random = new Random();
         this.notepad = new DetectiveNotepad();
+        this.lastSuggestedSuspect = null;
+        this.lastSuggestedWeapon = null;
+        this.undisprovedSuggestion = null;
     }
 
     /**
@@ -138,18 +144,22 @@ public class AIPlayer extends Player {
     }
 
     /**
-     * Makes a suggestion using the current room. Prefers to name suspects
-     * and weapons that the AI has not yet seen, to gather new information.
-     * Falls back to random if all suspects/weapons are already known.
+     * Makes a suggestion using the current room. Prioritises unseen suspects
+     * and weapons to gather new information, avoids repeating the exact same
+     * suggestion from the previous turn, and targets the deduced envelope
+     * card when a category is fully narrowed.
      * @return a Suggestion using the current room, or null if not in a room
      */
     @Override
     public Suggestion makeSuggestion() {
         if (getCurrentRoom() == null) return null;
 
-        String suspect = pickUnseen(SUSPECTS);
-        String weapon = pickUnseen(WEAPONS);
+        String suspect = pickBest(SUSPECTS, lastSuggestedSuspect);
+        String weapon = pickBest(WEAPONS, lastSuggestedWeapon);
         String roomName = getCurrentRoom().getName();
+
+        lastSuggestedSuspect = suspect;
+        lastSuggestedWeapon = weapon;
 
         return new Suggestion(
                 new SuspectCard(suspect),
@@ -159,28 +169,65 @@ public class AIPlayer extends Player {
     }
 
     /**
-     * Picks an unseen name from the given category if possible, otherwise
-     * picks a random one. This helps the AI gather new information.
-     * @param names all names in a category (suspects, weapons, etc.)
-     * @return an unseen name, or a random name if all are seen
+     * Picks the best name to suggest from a category. Priority order:
+     * 1. The deduced envelope card (if exactly one unseen remains)
+     * 2. An unseen name that was not suggested last turn
+     * 3. Any unseen name
+     * 4. The deduced missing card (if known)
+     * 5. A random name as a last resort
+     * @param names all names in the category
+     * @param lastSuggested the name suggested last turn (to avoid repeats)
+     * @return the chosen name
      */
-    private String pickUnseen(String[] names) {
+    private String pickBest(String[] names, String lastSuggested) {
         List<String> unseen = new ArrayList<>();
         for (String name : names) {
             if (!notepad.getSeenCards().contains(name)) {
                 unseen.add(name);
             }
         }
-        if (!unseen.isEmpty()) {
+
+        // if exactly one unseen, that is the deduced answer — always use it
+        if (unseen.size() == 1) {
+            return unseen.get(0);
+        }
+
+        // prefer unseen names that were not suggested last turn
+        if (unseen.size() > 1) {
+            List<String> fresh = new ArrayList<>();
+            for (String name : unseen) {
+                if (!name.equals(lastSuggested)) fresh.add(name);
+            }
+            if (!fresh.isEmpty()) {
+                return fresh.get(random.nextInt(fresh.size()));
+            }
             return unseen.get(random.nextInt(unseen.size()));
         }
+
+        // all seen — use the deduced missing card if available
+        String deduced = notepad.deduceMissing(names);
+        if (deduced != null) return deduced;
+
+        // last resort — random (should rarely happen)
         return names[random.nextInt(names.length)];
     }
 
     /**
-     * Makes an accusation only if the detective notepad has narrowed down
-     * exactly one suspect, one weapon and one room. Otherwise returns null.
-     * @return an Accusation if the AI is confident, or null
+     * Records a suggestion that no one could disprove. The AI treats this
+     * as a strong accusation candidate on future turns.
+     * @param suggestion the undisproved suggestion
+     */
+    public void setUndisprovedSuggestion(Suggestion suggestion) {
+        this.undisprovedSuggestion = suggestion;
+    }
+
+    /**
+     * Makes an accusation if the AI has enough information. Checks in order:
+     * 1. Fully deduced (all three categories narrowed to one) — accuse.
+     * 2. Has an undisproved suggestion — 50% chance to accuse with it.
+     * 3. Two of three categories deduced — 50% chance to guess the third.
+     * 4. Otherwise, do not accuse.
+     * @return an Accusation if the AI is ready, or null
      */
     @Override
     public Accusation makeAccusation() {
@@ -188,14 +235,46 @@ public class AIPlayer extends Player {
         String weapon = notepad.deduceMissing(WEAPONS);
         String room = notepad.deduceMissing(ROOMS);
 
+        // fully deduced — accuse with certainty
         if (suspect != null && weapon != null && room != null) {
-            System.out.println(getName() + " (AI) thinks they know the answer!");
             return new Accusation(
                     new SuspectCard(suspect),
                     new WeaponCard(weapon),
                     new RoomCard(room)
             );
         }
+
+        // undisproved suggestion — strong candidate, 50% chance to pounce
+        if (undisprovedSuggestion != null && random.nextInt(2) == 0) {
+            Accusation acc = new Accusation(
+                    undisprovedSuggestion.getSuspect(),
+                    undisprovedSuggestion.getWeapon(),
+                    undisprovedSuggestion.getRoom()
+            );
+            undisprovedSuggestion = null; // only try once
+            return acc;
+        }
+
+        // calculated risk: if 2 of 3 categories are deduced, guess the third
+        if (random.nextInt(2) == 0) {
+            int deduced = 0;
+            if (suspect != null) deduced++;
+            if (weapon != null) deduced++;
+            if (room != null) deduced++;
+
+            if (deduced == 2) {
+                if (suspect == null) suspect = pickBest(SUSPECTS, null);
+                if (weapon == null) weapon = pickBest(WEAPONS, null);
+                if (room == null) room = pickBest(ROOMS, null);
+
+                return new Accusation(
+                        new SuspectCard(suspect),
+                        new WeaponCard(weapon),
+                        new RoomCard(room)
+                );
+            }
+        }
+
         return null;
     }
 

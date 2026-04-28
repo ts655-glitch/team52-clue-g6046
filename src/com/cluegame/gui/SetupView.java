@@ -50,40 +50,52 @@ public class SetupView extends VBox {
         this.nameFields = new ArrayList<>();
         this.charBoxes = new ArrayList<>();
 
-        setAlignment(Pos.TOP_CENTER);
-        setSpacing(12);
-        setPadding(new Insets(30, 60, 30, 60));
-        setMaxWidth(550);
+        setAlignment(Pos.CENTER);
+        setSpacing(0);
+        setPadding(new Insets(0));
         setStyle("-fx-background-color: #1a1a2e;");
 
+        // title block
         Label title = new Label("CLUE!");
-        title.setFont(Font.font("System", FontWeight.BOLD, 42));
+        title.setFont(Font.font("System", FontWeight.BOLD, 44));
         title.setStyle("-fx-text-fill: white;");
 
         Label subtitle = new Label("Murder Mystery Game");
-        subtitle.setFont(Font.font("System", 16));
-        subtitle.setStyle("-fx-text-fill: #aaaaaa;");
+        subtitle.setFont(Font.font("System", 15));
+        subtitle.setStyle("-fx-text-fill: #999999;");
+        subtitle.setPadding(new Insets(0, 0, 16, 0));
+
+        // inner setup panel with distinct background
+        VBox panel = new VBox(10);
+        panel.setAlignment(Pos.CENTER);
+        panel.setPadding(new Insets(20, 30, 20, 30));
+        panel.setMaxWidth(480);
+        panel.setStyle("-fx-background-color: #222244; -fx-background-radius: 8;");
 
         // player count row
+        Label countHeading = new Label("Game Setup");
+        countHeading.setFont(Font.font("System", FontWeight.BOLD, 14));
+        countHeading.setStyle("-fx-text-fill: white;");
+
         GridPane countGrid = new GridPane();
         countGrid.setHgap(10);
-        countGrid.setVgap(8);
+        countGrid.setVgap(6);
         countGrid.setAlignment(Pos.CENTER);
 
         Label humanLabel = new Label("Human players:");
-        humanLabel.setStyle("-fx-text-fill: white; -fx-font-size: 13;");
+        humanLabel.setStyle("-fx-text-fill: #cccccc; -fx-font-size: 13;");
         humanCountBox = new ComboBox<>();
         humanCountBox.getItems().addAll(1, 2, 3, 4, 5);
         humanCountBox.setValue(1);
-        humanCountBox.setPrefWidth(80);
+        humanCountBox.setPrefWidth(70);
         humanCountBox.setOnAction(e -> rebuildPlayerConfig());
 
         Label aiLabel = new Label("AI players:");
-        aiLabel.setStyle("-fx-text-fill: white; -fx-font-size: 13;");
+        aiLabel.setStyle("-fx-text-fill: #cccccc; -fx-font-size: 13;");
         aiCountBox = new ComboBox<>();
         aiCountBox.getItems().addAll(0, 1, 2, 3, 4, 5);
         aiCountBox.setValue(2);
-        aiCountBox.setPrefWidth(80);
+        aiCountBox.setPrefWidth(70);
         aiCountBox.setOnAction(e -> rebuildPlayerConfig());
 
         countGrid.add(humanLabel, 0, 0);
@@ -94,23 +106,29 @@ public class SetupView extends VBox {
         // player config
         playerConfigArea = new VBox(6);
         playerConfigArea.setAlignment(Pos.CENTER);
-        playerConfigArea.setPadding(new Insets(5, 0, 5, 0));
+        playerConfigArea.setPadding(new Insets(4, 0, 4, 0));
 
         // status label
         statusLabel = new Label();
-        statusLabel.setStyle("-fx-text-fill: #888888; -fx-font-size: 12;");
+        statusLabel.setStyle("-fx-text-fill: #888888; -fx-font-size: 11;");
         statusLabel.setWrapText(true);
 
-        // start button
+        panel.getChildren().addAll(countHeading, countGrid,
+                new Separator(), playerConfigArea, statusLabel);
+
+        // start button — outside the panel for emphasis
         Button startButton = new Button("Start Game");
         startButton.setFont(Font.font("System", FontWeight.BOLD, 15));
-        startButton.setPrefWidth(180);
-        startButton.setPrefHeight(36);
+        startButton.setPrefWidth(200);
+        startButton.setPrefHeight(38);
+        startButton.setStyle("-fx-background-radius: 6;");
         startButton.setOnAction(e -> onStart());
 
-        getChildren().addAll(title, subtitle, new Separator(),
-                countGrid, new Separator(), playerConfigArea,
-                statusLabel, startButton);
+        VBox buttonWrapper = new VBox(startButton);
+        buttonWrapper.setAlignment(Pos.CENTER);
+        buttonWrapper.setPadding(new Insets(14, 0, 0, 0));
+
+        getChildren().addAll(title, subtitle, panel, buttonWrapper);
 
         rebuildPlayerConfig();
     }

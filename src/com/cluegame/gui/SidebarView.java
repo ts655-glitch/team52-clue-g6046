@@ -130,7 +130,8 @@ public class SidebarView extends VBox {
         gameLog = new TextArea();
         gameLog.setEditable(false);
         gameLog.setWrapText(true);
-        gameLog.setPrefHeight(250);
+        gameLog.setPrefHeight(200);
+        javafx.scene.layout.VBox.setVgrow(gameLog, javafx.scene.layout.Priority.ALWAYS);
         gameLog.setStyle("-fx-control-inner-background: #1e1e1e; "
                 + "-fx-text-fill: #dddddd; -fx-font-size: 11;");
 
@@ -445,8 +446,18 @@ public class SidebarView extends VBox {
             return;
         }
 
-        appendLog(controller.getCurrentPlayer().getName()
-                + "'s accusation was WRONG! Eliminated.");
+        String playerName = controller.getCurrentPlayer().getName();
+        appendLog(playerName + "'s accusation was WRONG! Eliminated.");
+
+        Alert eliminated = new Alert(Alert.AlertType.ERROR);
+        eliminated.setTitle("Clue! - Wrong Accusation");
+        eliminated.setHeaderText("Your accusation was incorrect.");
+        eliminated.setContentText(playerName + " has been eliminated from the game.\n\n"
+                + "You will remain to disprove other players' suggestions,\n"
+                + "but you can no longer move, suggest, or accuse.\n\n"
+                + "The game will continue with the remaining players.");
+        eliminated.showAndWait();
+
         if (controller.isGameOver()) { showGameOver(); return; }
         finishTurn();
     }
@@ -462,13 +473,17 @@ public class SidebarView extends VBox {
         } else {
             msg.append("No one solved the mystery.\n");
         }
+        String envSuspect = controller.getEnvelope().getSuspect() != null
+                ? controller.getEnvelope().getSuspect().getName() : "(unknown)";
+        String envWeapon = controller.getEnvelope().getWeapon() != null
+                ? controller.getEnvelope().getWeapon().getName() : "(unknown)";
+        String envRoom = controller.getEnvelope().getRoom() != null
+                ? controller.getEnvelope().getRoom().getName() : "(unknown)";
+
         msg.append("\nMurder envelope:\n");
-        msg.append("  Suspect: ").append(
-                controller.getEnvelope().getSuspect().getName()).append("\n");
-        msg.append("  Weapon:  ").append(
-                controller.getEnvelope().getWeapon().getName()).append("\n");
-        msg.append("  Room:    ").append(
-                controller.getEnvelope().getRoom().getName()).append("\n");
+        msg.append("  Suspect: ").append(envSuspect).append("\n");
+        msg.append("  Weapon:  ").append(envWeapon).append("\n");
+        msg.append("  Room:    ").append(envRoom).append("\n");
         appendLog(msg.toString());
 
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -477,9 +492,10 @@ public class SidebarView extends VBox {
                 ? controller.getWinner().getName() + " wins!"
                 : "No one solved the mystery.");
         alert.setContentText(
-                "Suspect: " + controller.getEnvelope().getSuspect().getName()
-                + "\nWeapon: " + controller.getEnvelope().getWeapon().getName()
-                + "\nRoom: " + controller.getEnvelope().getRoom().getName());
+                "Suspect: " + envSuspect
+                + "\nWeapon: " + envWeapon
+                + "\nRoom: " + envRoom);
+        alert.getDialogPane().setMinWidth(350);
         alert.showAndWait();
     }
 
@@ -553,12 +569,26 @@ public class SidebarView extends VBox {
 
     private int aiOnlyTurnCount = 0;
 
+    /**
+     * Maximum number of full rounds (each active AI gets one turn per round)
+     * before the AI-only endgame gives up. With 3 AI players and 50 rounds,
+     * that is up to 150 individual turns — enough time to explore and deduce.
+     */
+    private static final int AI_ONLY_MAX_ROUNDS = 100;
+
     private void runAIOnlyFinish() {
         if (aiOnlyTurnCount == 0) {
             appendLog("\nAll human players eliminated. AI resolving...");
         }
 
-        if (controller.isGameOver() || aiOnlyTurnCount >= 50) {
+        // count active AI players to compute rounds from individual turns
+        int activeAI = 0;
+        for (Player p : controller.getPlayers()) {
+            if (p.isActive()) activeAI++;
+        }
+        int maxTurns = AI_ONLY_MAX_ROUNDS * Math.max(activeAI, 1);
+
+        if (controller.isGameOver() || aiOnlyTurnCount >= maxTurns) {
             if (!controller.isGameOver()) {
                 appendLog("Game ended — no one solved the mystery.");
             }
