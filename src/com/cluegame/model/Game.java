@@ -69,6 +69,7 @@ public class Game {
     private int turnCount;
     private Player winner;
     private boolean multipleHumans;
+    private boolean announcedAiOnlyPhase;
     private Scanner scanner;
 
     // non-player suspect pieces (suspects not controlled by any player)
@@ -103,6 +104,7 @@ public class Game {
         this.nonPlayerSuspects = new HashMap<>();
         this.weaponPositions = new HashMap<>();
         this.scanner = scanner;
+        this.announcedAiOnlyPhase = false;
 
         // count human players to know if we need handoff screens
         int humanCount = 0;
@@ -153,11 +155,12 @@ public class Game {
             printStatus();
             nextTurn();
 
-            // check if all human players are eliminated
-            if (!gameOver && allHumansEliminated()) {
+            // if only AI remains, let the game continue to resolution
+            if (!gameOver && allHumansEliminated() && !announcedAiOnlyPhase) {
                 System.out.println("\nAll human players have been eliminated.");
-                System.out.println("The game ends — the mystery remains unsolved!");
-                gameOver = true;
+                System.out.println("AI players will continue until the mystery is solved"
+                        + " or the turn limit is reached.");
+                announcedAiOnlyPhase = true;
             }
         }
 
@@ -492,6 +495,7 @@ public class Game {
     public static String[] getTokenNames() { return TOKEN_NAMES; }
 
     public Player getCurrentPlayer() { return players.get(currentPlayerIndex); }
+    public int getCurrentPlayerIndex() { return currentPlayerIndex; }
     public List<Player> getPlayers() { return players; }
     public boolean isGameOver() { return gameOver; }
     public void setGameOver(boolean gameOver) { this.gameOver = gameOver; }

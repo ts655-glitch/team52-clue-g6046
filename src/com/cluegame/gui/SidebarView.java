@@ -9,6 +9,7 @@ import com.cluegame.model.Suggestion;
 import com.cluegame.players.HumanPlayer;
 import com.cluegame.players.Player;
 import javafx.animation.PauseTransition;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
@@ -49,16 +50,22 @@ public class SidebarView extends VBox {
     private TextArea gameLog;
     private GameController controller;
     private BoardView boardView;
+    private NotebookView notebookView;
+    private Player displayedPlayer;
     private boolean multipleHumans;
+    private PauseTransition aiTurnPause;
+    private boolean currentTurnEndLogged;
 
     /**
      * Creates the sidebar with all UI components, wired to the controller.
      * @param controller the game controller managing turn state
      * @param boardView the board view to refresh after actions
      */
-    public SidebarView(GameController controller, BoardView boardView) {
+    public SidebarView(GameController controller, BoardView boardView,
+                       NotebookView notebookView) {
         this.controller = controller;
         this.boardView = boardView;
+        this.notebookView = notebookView;
 
         int humanCount = 0;
         for (Player p : controller.getPlayers()) {
@@ -146,10 +153,13 @@ public class SidebarView extends VBox {
                 logTitle, gameLog);
 
         boardView.setClickListener(this::onBoardClicked);
+        controller.setSuggestionCardChooser(this::chooseSuggestionCardForGui);
 
         updateForCurrentPlayer();
         setPhase("Waiting to roll");
+        currentTurnEndLogged = false;
         appendLog("Game started. Cards have been dealt.");
+        appendHumanTurnBanner();
     }
 
     /**
@@ -308,6 +318,10 @@ public class SidebarView extends VBox {
         if (controller.getCurrentPlayer().getCurrentRoom() != null) {
             enterSuggestionPhase();
         } else {
+            Player current = controller.getCurrentPlayer();
+            appendLog(current.getName() + " ends the turn at ("
+                    + current.getRow() + ", " + current.getCol() + ").");
+            currentTurnEndLogged = true;
             setPhase("");
             finishTurn();
         }
@@ -513,11 +527,13 @@ public class SidebarView extends VBox {
 
     private void finishTurn() {
         if (controller.isGameOver()) { showGameOver(); return; }
+        logHumanTurnEndIfNeeded();
         hideTurnButtons();
         setPhase("Advancing...");
         rollDiceButton.setDisable(true);
 
         controller.advanceToNextPlayer();
+        if (controller.isGameOver()) { showGameOver(); return; }
         processNextTurn();
     }
 
@@ -530,6 +546,10 @@ public class SidebarView extends VBox {
         }
 
         if (controller.isCurrentPlayerAI()) {
+            hideTurnButtons();
+            updateDisplayedPlayer(controller.getCurrentPlayer());
+            setPhase("AI resolving...");
+            rollDiceButton.setDisable(true);
             List<String> aiLog = controller.runAITurn();
             for (String msg : aiLog) {
                 appendLog(msg);
@@ -539,25 +559,43 @@ public class SidebarView extends VBox {
             if (controller.isGameOver()) { showGameOver(); return; }
 
             controller.advanceToNextPlayer();
-
-            PauseTransition pause = new PauseTransition(Duration.millis(800));
-            pause.setOnFinished(e -> processNextTurn());
-            pause.play();
-        } else {
-            appendLog("");
-            if (multipleHumans) {
-                Player next = controller.getCurrentPlayer();
-                Alert handoff = new Alert(Alert.AlertType.INFORMATION);
-                handoff.setTitle("Clue! - Player Handoff");
-                handoff.setHeaderText("Pass to " + next.getName()
-                        + " (" + next.getToken() + ")");
-                handoff.setContentText("Press OK when ready.");
-                handoff.showAndWait();
+            if (controller.isCurrentPlayerAI()) {
+                setPhase("AI resolving...");
+                scheduleAiContinuation(this::processNextTurn, 800);
+            } else {
+                beginHumanTurn();
             }
-            updateForCurrentPlayer();
-            setPhase("Waiting to roll");
-            rollDiceButton.setDisable(false);
+        } else {
+            beginHumanTurn();
         }
+    }
+
+    private void beginHumanTurn() {
+        hideTurnButtons();
+        boardView.drawTokens();
+        Player next = controller.getCurrentPlayer();
+
+        appendLog("");
+        if (multipleHumans) {
+            showHandoffPlaceholder(next);
+            Alert handoff = new Alert(Alert.AlertType.INFORMATION);
+            handoff.setTitle("Clue! - Player Handoff");
+            handoff.setHeaderText("Pass to " + next.getName()
+                    + " (" + next.getToken() + ")");
+            handoff.setContentText("Press OK when " + next.getName()
+                    + " is ready to begin their turn.");
+            handoff.showAndWait();
+        }
+
+        updateForCurrentPlayer();
+        currentTurnEndLogged = false;
+        appendHumanTurnBanner();
+        setPhase(next.getCurrentRoom() == null
+                ? "Waiting to roll"
+                : "In room — roll to exit or stay");
+        rollDiceButton.setDisable(false);
+        rollDiceButton.setVisible(true);
+        rollDiceButton.setManaged(true);
     }
 
     private boolean hasActiveHuman() {
@@ -580,6 +618,9 @@ public class SidebarView extends VBox {
         if (aiOnlyTurnCount == 0) {
             appendLog("\nAll human players eliminated. AI resolving...");
         }
+        hideTurnButtons();
+        setPhase("AI resolving...");
+        rollDiceButton.setDisable(true);
 
         // count active AI players to compute rounds from individual turns
         int activeAI = 0;
@@ -597,6 +638,7 @@ public class SidebarView extends VBox {
         }
 
         aiOnlyTurnCount++;
+        updateDisplayedPlayer(controller.getCurrentPlayer());
         List<String> aiLog = controller.runAITurn();
         for (String msg : aiLog) { appendLog(msg); }
         boardView.drawTokens();
@@ -604,9 +646,7 @@ public class SidebarView extends VBox {
         if (controller.isGameOver()) { showGameOver(); return; }
         controller.advanceToNextPlayer();
 
-        PauseTransition pause = new PauseTransition(Duration.millis(600));
-        pause.setOnFinished(e -> runAIOnlyFinish());
-        pause.play();
+        scheduleAiContinuation(this::runAIOnlyFinish, 600);
     }
 
     private void hideTurnButtons() {
@@ -622,17 +662,55 @@ public class SidebarView extends VBox {
         movesLabel.setText("");
     }
 
-    private void updateForCurrentPlayer() {
+    private void logHumanTurnEndIfNeeded() {
         Player current = controller.getCurrentPlayer();
-        turnLabel.setText(current.getName() + " (" + current.getToken() + ")");
+        if (!(current instanceof HumanPlayer) || !current.isActive()
+                || currentTurnEndLogged) return;
+
+        if (current.getCurrentRoom() != null) {
+            appendLog(current.getName() + " ends the turn in the "
+                    + current.getCurrentRoom().getName() + ".");
+        } else {
+            appendLog(current.getName() + " ends the turn at ("
+                    + current.getRow() + ", " + current.getCol() + ").");
+        }
+        currentTurnEndLogged = true;
+    }
+
+    private void showHandoffPlaceholder(Player next) {
+        turnLabel.setText("Pass to " + next.getName()
+                + " (" + next.getToken() + ")");
+        setPhase("Player handoff");
+        handBox.getChildren().clear();
+        Label prompt = new Label("  Hand hidden until " + next.getName()
+                + " is ready.");
+        prompt.setStyle("-fx-text-fill: #aaaaaa; -fx-font-size: 11;");
+        handBox.getChildren().add(prompt);
+    }
+
+    private void updateForCurrentPlayer() {
+        updateDisplayedPlayer(controller.getCurrentPlayer());
+    }
+
+    private void updateDisplayedPlayer(Player player) {
+        displayedPlayer = player;
+        turnLabel.setText(player.getName() + " (" + player.getToken() + ")");
 
         handBox.getChildren().clear();
-        for (Card card : current.getHand()) {
+        if (!(player instanceof HumanPlayer)) {
+            Label aiLabel = new Label("  (AI hand hidden)");
+            aiLabel.setStyle("-fx-text-fill: #888888; -fx-font-size: 11;");
+            handBox.getChildren().add(aiLabel);
+            return;
+        }
+
+        notebookView.setCurrentPlayer(player);
+        for (Card card : player.getHand()) {
             Label cardLabel = new Label("  " + card.getName());
             cardLabel.setStyle("-fx-text-fill: #aaddaa; -fx-font-size: 11;");
             handBox.getChildren().add(cardLabel);
         }
-        if (current.getHand().isEmpty()) {
+        if (player.getHand().isEmpty()) {
             Label emptyLabel = new Label("  (no cards)");
             emptyLabel.setStyle("-fx-text-fill: #666666; -fx-font-size: 11;");
             handBox.getChildren().add(emptyLabel);
@@ -650,5 +728,87 @@ public class SidebarView extends VBox {
 
     public void appendLog(String message) {
         gameLog.appendText(message + "\n");
+    }
+
+    private void appendHumanTurnBanner() {
+        if (controller.isCurrentPlayerHuman()) {
+            appendLog("--- " + controller.getCurrentPlayer().getName()
+                    + "'s turn ---");
+        }
+    }
+
+    private void scheduleAiContinuation(Runnable continuation, int millis) {
+        if (aiTurnPause != null) {
+            aiTurnPause.stop();
+            aiTurnPause = null;
+        }
+
+        // Running on the next JavaFX pulse is more reliable than chaining
+        // several timed pauses, which could leave the UI appearing stuck in
+        // "AI resolving..." if a transition was interrupted.
+        Platform.runLater(continuation);
+    }
+
+    private Card chooseSuggestionCardForGui(Player disprover,
+                                            List<Card> matchingCards,
+                                            String askerName) {
+        if (matchingCards == null || matchingCards.isEmpty()) {
+            return null;
+        }
+
+        if (!(disprover instanceof HumanPlayer) || !hasActiveHuman()
+                || matchingCards.size() == 1) {
+            return matchingCards.get(0);
+        }
+
+        Player originalPlayer = displayedPlayer != null
+                ? displayedPlayer
+                : controller.getCurrentPlayer();
+        String previousPhase = phaseLabel.getText();
+
+        try {
+            if (multipleHumans) {
+                Alert handoff = new Alert(Alert.AlertType.INFORMATION);
+                handoff.setTitle("Clue! - Private Card Choice");
+                handoff.setHeaderText("Pass to " + disprover.getName());
+                handoff.setContentText(disprover.getName()
+                        + " must choose which card to show to " + askerName + ".");
+                handoff.showAndWait();
+            }
+
+            updateDisplayedPlayer(disprover);
+            setPhase("Private card choice");
+            applyCss();
+            layout();
+
+            List<String> options = matchingCards.stream()
+                    .map(Card::getName)
+                    .toList();
+            ChoiceDialog<String> dialog = new ChoiceDialog<>(options.get(0), options);
+            dialog.setTitle("Clue! - Choose Card to Show");
+            dialog.setHeaderText(disprover.getName()
+                    + ", choose one card to show to " + askerName + ".");
+            dialog.setContentText("Matching cards:");
+            Optional<String> result = dialog.showAndWait();
+
+            String chosenName = result.orElse(options.get(0));
+            for (Card card : matchingCards) {
+                if (card.getName().equals(chosenName)) {
+                    return card;
+                }
+            }
+
+            return matchingCards.get(0);
+        } finally {
+            updateDisplayedPlayer(originalPlayer);
+            if (multipleHumans) {
+                Alert handoffBack = new Alert(Alert.AlertType.INFORMATION);
+                handoffBack.setTitle("Clue! - Return Turn");
+                handoffBack.setHeaderText("Pass back to " + askerName);
+                handoffBack.setContentText("Press OK when " + askerName + " is ready.");
+                handoffBack.showAndWait();
+            }
+            setPhase(previousPhase);
+        }
     }
 }

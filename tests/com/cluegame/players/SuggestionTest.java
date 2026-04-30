@@ -4,6 +4,7 @@ import com.cluegame.cards.Card;
 import com.cluegame.cards.RoomCard;
 import com.cluegame.cards.SuspectCard;
 import com.cluegame.cards.WeaponCard;
+import com.cluegame.model.Accusation;
 import com.cluegame.model.Suggestion;
 
 import org.junit.jupiter.api.Test;
@@ -206,5 +207,43 @@ public class SuggestionTest {
         assertNotNull(suggestion, "AI should make a suggestion when in a room");
         assertEquals("Kitchen", suggestion.getRoom().getName(),
                 "Suggestion room should match the AI's current room");
+    }
+
+    /**
+     * Validates FR9 — an undisproved suggestion can partially confirm
+     * envelope cards even when the AI holds one card from the suggestion.
+     */
+    @Test
+    public void testAIUsesPartialUndisprovedSuggestionToAccuseLater() {
+        AIPlayer ai = new AIPlayer("AI", "Scarlett", 0, 0);
+        ai.addCard(new RoomCard("Ballroom"));
+
+        ai.setUndisprovedSuggestion(new Suggestion(
+                new SuspectCard("Reverend Green"),
+                new WeaponCard("Rope"),
+                new RoomCard("Ballroom")
+        ));
+
+        assertNull(ai.makeAccusation(),
+                "AI should not accuse while the room is still unconfirmed");
+
+        ai.enterRoom(new com.cluegame.model.Room("Billiard Room"));
+        Suggestion followUp = ai.makeSuggestion();
+
+        assertEquals("Reverend Green", followUp.getSuspect().getName(),
+                "AI should reuse the confirmed suspect");
+        assertEquals("Rope", followUp.getWeapon().getName(),
+                "AI should reuse the confirmed weapon");
+        assertEquals("Billiard Room", followUp.getRoom().getName(),
+                "AI should test the current room");
+
+        ai.setUndisprovedSuggestion(followUp);
+        Accusation accusation = ai.makeAccusation();
+
+        assertNotNull(accusation,
+                "AI should accuse once suspect, weapon and room are confirmed");
+        assertEquals("Reverend Green", accusation.getSuspect().getName());
+        assertEquals("Rope", accusation.getWeapon().getName());
+        assertEquals("Billiard Room", accusation.getRoom().getName());
     }
 }

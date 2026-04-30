@@ -79,8 +79,7 @@ public class BoardView extends Pane {
      * Creates a BoardView that loads the board image and sets up the
      * token overlay canvas. The board automatically scales to fit
      * whatever space it is given by its parent layout.
-     * @param players the list of players whose tokens to draw
-     * @param board the logical board (used for debug overlay)
+     * @param game the Game instance containing players and board data
      */
     public BoardView(com.cluegame.model.Game game) {
         this.game = game;

@@ -1,0 +1,1 @@
+packageSearchIndex = [{"l":"All Packages","u":"allpackages-index.html"},{"l":"com.cluegame"},{"l":"com.cluegame.cards"},{"l":"com.cluegame.gui"},{"l":"com.cluegame.model"},{"l":"com.cluegame.players"}];updateSearchResults();

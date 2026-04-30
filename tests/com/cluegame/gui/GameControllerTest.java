@@ -257,4 +257,126 @@ public class GameControllerTest {
         controller.advanceToNextPlayer();
         assertEquals("Alice", controller.getCurrentPlayer().getName());
     }
+
+    /**
+     * Human-only games should advance directly between human players without
+     * relying on any AI continuation loop.
+     */
+    @Test
+    public void testHumanOnlyAdvanceToNextHuman() {
+        List<Player> humanPlayers = new ArrayList<>();
+        humanPlayers.add(new HumanPlayer("Player 1", "Scarlett", 0, 0,
+                new Scanner(System.in)));
+        humanPlayers.add(new HumanPlayer("Player 2", "Mustard", 0, 0,
+                new Scanner(System.in)));
+
+        Game humanOnlyGame = new Game(humanPlayers);
+        humanOnlyGame.startGame();
+        GameController humanOnlyController = new GameController(humanOnlyGame);
+
+        assertEquals("Player 1", humanOnlyController.getCurrentPlayer().getName());
+        humanOnlyController.advanceToNextPlayer();
+        assertEquals("Player 2", humanOnlyController.getCurrentPlayer().getName());
+        assertFalse(humanOnlyController.isGameOver());
+    }
+
+    /**
+     * Eliminated human players still hold cards, but their turns should be
+     * skipped so the next active human can continue.
+     */
+    @Test
+    public void testHumanOnlyAdvanceSkipsEliminatedHuman() {
+        List<Player> humanPlayers = new ArrayList<>();
+        humanPlayers.add(new HumanPlayer("Player 1", "Scarlett", 0, 0,
+                new Scanner(System.in)));
+        humanPlayers.add(new HumanPlayer("Player 2", "Mustard", 0, 0,
+                new Scanner(System.in)));
+
+        Game humanOnlyGame = new Game(humanPlayers);
+        humanOnlyGame.startGame();
+        GameController humanOnlyController = new GameController(humanOnlyGame);
+
+        Accusation wrong = new Accusation(
+                new SuspectCard("Miss Scarlett"),
+                new WeaponCard("Candlestick"),
+                new RoomCard("Kitchen"));
+        MurderEnvelope envelope = humanOnlyController.getEnvelope();
+        if (envelope.verify(wrong.getSuspect(), wrong.getWeapon(), wrong.getRoom())) {
+            wrong = new Accusation(
+                    new SuspectCard("Mrs White"),
+                    new WeaponCard("Rope"),
+                    new RoomCard("Hall"));
+        }
+
+        assertFalse(humanOnlyController.checkAccusation(wrong));
+        assertFalse(humanOnlyController.getCurrentPlayer().isActive());
+
+        humanOnlyController.advanceToNextPlayer();
+
+        assertEquals("Player 2", humanOnlyController.getCurrentPlayer().getName());
+        assertTrue(humanOnlyController.getCurrentPlayer().isActive());
+        assertFalse(humanOnlyController.isGameOver());
+    }
+
+    /**
+     * If an AI has already deduced the full envelope, it should accuse at the
+     * start of its turn instead of waiting to enter another room first.
+     */
+    @Test
+    public void testAIAccusesAtStartOfTurnWhenReady() {
+        List<Player> testPlayers = new ArrayList<>();
+        AIPlayer ai = new AIPlayer("AI Scarlett", "Scarlett", 0, 0);
+        testPlayers.add(ai);
+        testPlayers.add(new HumanPlayer("Player 2", "Mustard", 0, 0,
+                new Scanner(System.in)));
+
+        Game testGame = new Game(testPlayers);
+        testGame.startGame();
+        GameController testController = new GameController(testGame);
+        MurderEnvelope envelope = testController.getEnvelope();
+
+        ai.setUndisprovedSuggestion(new Suggestion(
+                envelope.getSuspect(),
+                envelope.getWeapon(),
+                envelope.getRoom()));
+
+        List<String> log = testController.runAITurn();
+
+        assertTrue(testController.isGameOver());
+        assertEquals(ai, testController.getWinner());
+        assertTrue(log.stream().anyMatch(line -> line.contains("accuses")));
+    }
+
+    /**
+     * AI players should disprove automatically in the GUI; the private card
+     * chooser is only for human disprovers.
+     */
+    @Test
+    public void testAIDisprovalDoesNotUsePrivateChooser() {
+        List<Player> testPlayers = new ArrayList<>();
+        AIPlayer suggester = new AIPlayer("AI Scarlett", "Scarlett", 0, 0);
+        AIPlayer disprover = new AIPlayer("AI Mustard", "Mustard", 0, 0);
+        disprover.addCard(new WeaponCard("Dagger"));
+        testPlayers.add(suggester);
+        testPlayers.add(disprover);
+
+        Game testGame = new Game(testPlayers);
+        testGame.startGame();
+        GameController testController = new GameController(testGame);
+        suggester.enterRoom(testGame.getBoard().getRoom("Hall"));
+        testController.setSuggestionCardChooser((player, cards, asker) -> {
+            fail("Private card chooser should not be used for AI disprovers");
+            return cards.get(0);
+        });
+
+        GameController.SuggestionResult result = testController.resolveSuggestion(
+                new Suggestion(
+                        new SuspectCard("Mrs White"),
+                        new WeaponCard("Dagger"),
+                        new RoomCard("Hall")));
+
+        assertTrue(result.isDisproved());
+        assertEquals("AI Mustard", result.getDisproverName());
+        assertEquals("Dagger", result.getShownCard().getName());
+    }
 }

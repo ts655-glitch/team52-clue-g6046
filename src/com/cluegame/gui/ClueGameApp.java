@@ -52,8 +52,8 @@ public class ClueGameApp extends Application {
 
         GameController controller = new GameController(game);
 
-        SidebarView sidebar = new SidebarView(controller, boardView);
-        NotebookView notebook = new NotebookView();
+        NotebookView notebook = new NotebookView(game.getPlayers());
+        SidebarView sidebar = new SidebarView(controller, boardView, notebook);
 
         BorderPane root = new BorderPane();
         root.setLeft(notebook);

@@ -1,87 +1,128 @@
-# Clue! — Murder Mystery Game (Console Prototype)
+# Clue! - Murder Mystery Game
 
-A Java console-based implementation of the classic board game Clue! (Cluedo). Built by Team 52.
+A Java implementation of the classic board game Clue! (Cluedo), built by Team 52.
 
-## How to Run
+The main version of the game is a JavaFX GUI with a visual board, player setup screen,
+detective notebook, human turns, AI turns, suggestions, disprovals and accusations.
+A console entry point is also included for the earlier text-based version.
 
-Requires **Java 21+**.
+## Requirements
+
+- Java 21+
+- JavaFX SDK 21+ for the GUI
+
+The project was developed with JavaFX SDK 21.0.11.
+
+## How to Run the GUI
+
+From the project root, compile the source files and copy the board image into the
+output directory:
 
 ```bash
-javac -d out src/com/cluegame/**/*.java src/com/cluegame/*.java
+mkdir -p out
+javac --module-path /Applications/javafx-sdk-21.0.11/lib --add-modules javafx.controls,javafx.graphics -d out $(find src -name "*.java")
+cp src/resources/board.png out/board.png
+```
+
+Then launch the JavaFX application:
+
+```bash
+java --module-path /Applications/javafx-sdk-21.0.11/lib --add-modules javafx.controls,javafx.graphics -cp out com.cluegame.gui.ClueGameApp
+```
+
+If your JavaFX SDK is installed somewhere else, replace
+`/Applications/javafx-sdk-21.0.11/lib` with the path to your local JavaFX `lib`
+folder.
+
+## Console Version
+
+The console version can be launched from the same compiled output:
+
+```bash
 java -cp out com.cluegame.Main
 ```
 
-On launch you'll be asked how many **human** and **AI** players to include (2-6 total, at least 1 AI).
+The GUI is the recommended version for normal play.
+
+## Game Setup
+
+- Choose the number of human and AI players from the setup screen.
+- The game supports 2-6 total players.
+- Human players choose their character names and tokens.
+- AI players automatically take the remaining available characters.
+- The deck is shuffled, then one suspect, one weapon and one room are sealed in the murder envelope.
+- The remaining cards are dealt to the players.
 
 ## Game Overview
 
-A murder has been committed. One **suspect**, one **weapon** and one **room** are sealed in the murder envelope. Your goal is to figure out all three by making suggestions and eliminating possibilities.
+A murder has been committed. One suspect, one weapon and one room are hidden in
+the murder envelope. Players must deduce the solution by moving around the board,
+making suggestions, seeing disproval cards and eliminating possibilities.
 
 ### Suspects
+
 Miss Scarlett, Colonel Mustard, Mrs White, Reverend Green, Mrs Peacock, Professor Plum
 
 ### Weapons
+
 Candlestick, Dagger, Lead Piping, Revolver, Rope, Spanner
 
 ### Rooms
+
 Kitchen, Ballroom, Conservatory, Billiard Room, Library, Study, Hall, Lounge, Dining Room
-
-## Setup
-
-- The deck is shuffled and one suspect, weapon and room card are placed in the murder envelope (hidden).
-- The remaining 18 cards are dealt evenly to all players.
-- Cards in your hand **cannot** be in the envelope — use this to eliminate possibilities.
-- Each player is placed on their starting square on the board.
 
 ## Turn Structure
 
-Each turn has up to three phases:
+Each active player takes a turn in order.
 
-### 1. Movement
+### Movement
 
-**If you're in a room:**
-- If a **secret passage** exists (e.g. Kitchen <-> Study, Lounge <-> Conservatory), you can type `Y` to use it. This ends your movement.
-- Otherwise, pick a **numbered door** to exit through, or choose `0` to stay.
+- If a player is in a corridor, they roll the dice and move by clicking highlighted valid squares.
+- If a player reaches a room, movement ends immediately.
+- If a player starts in a room, they can stay, leave through a door, or use a secret passage where one exists.
+- Secret passages connect Kitchen with Study and Lounge with Conservatory.
 
-**If you're in a corridor:**
-- Roll the dice automatically.
-- Move step by step using direction commands:
-  - `N` = North (up), `S` = South (down), `E` = East (right), `W` = West (left)
-- The game shows which directions are valid each step.
-- Type `R` to enter a room if you're standing on its door.
-- Type `P` to stop moving early and pass remaining steps.
-- Entering a room **ends your movement immediately**.
+### Suggestions
 
-### 2. Suggestion (if in a room)
+- Suggestions can be made from inside a room.
+- The room in the suggestion is always the player's current room.
+- The suggested suspect token is moved into that room.
+- Other players are checked in turn order to see whether they can disprove the suggestion.
+- If a human player has multiple matching cards, they privately choose which card to show.
+- AI players choose a matching card automatically.
+- Eliminated players can still disprove suggestions because they still hold their cards.
 
-- You can suggest a suspect and weapon — the room is automatically your current room.
-- The accused suspect's piece gets moved into the room.
-- Going clockwise, each other player checks their hand:
-  - The **first** player with a matching card must privately show you one.
-  - If they have multiple matches, they choose which to show.
-  - If no one can disprove, the suggestion stands.
-- Eliminated players still disprove suggestions (they keep their cards).
+### Accusations
 
-### 3. Accusation (optional, only after a suggestion)
+- A player may make an accusation when they think they know the suspect, weapon and room.
+- A correct accusation wins the game immediately.
+- An incorrect accusation eliminates that player from winning, but they remain available to disprove suggestions.
+- If all human players are eliminated, the AI players continue resolving the game automatically.
 
-- You can formally accuse a suspect, weapon **and** room (any room, not just your current one).
-- If **correct** — you win the game!
-- If **wrong** — you are **eliminated**. You stay in the game only to disprove other players' suggestions.
+## Detective Notebook
 
-## How to Win
-
-Deduce which suspect, weapon and room are in the murder envelope by process of elimination:
-1. Cards in your hand are **not** in the envelope.
-2. Cards shown to you by other players are **not** in the envelope.
-3. When you've eliminated all but one option in each category, make your accusation.
+The GUI includes a detective notebook for tracking suspects, weapons and rooms.
+Each human player has their own notebook state, so notes are kept separate during
+multi-human games.
 
 ## AI Players
 
-AI players move, suggest and accuse automatically. They:
-- Navigate toward rooms they haven't visited yet.
-- Suggest suspects/weapons they haven't seen, to gather new information.
-- Only accuse when they've narrowed each category down to exactly one possibility.
+AI players move, suggest, disprove and accuse automatically. They use information
+from their own hand, seen disproval cards and undisproved suggestions to narrow
+down the murder envelope. AI players only make a final accusation when they have
+enough evidence to identify the suspect, weapon and room.
 
 ## Multiple Human Players
 
-When multiple humans are playing on the same screen, the game shows a **handoff screen** between turns so the previous player's information stays private. Press Enter when prompted to continue.
+Multiple human players can play on the same screen. The GUI uses handoff prompts
+between human turns and private card-choice prompts when a human player needs to
+disprove another player's suggestion. This helps keep each player's hand and
+notebook private during local play.
+
+## Testing
+
+The project includes JUnit tests for the card model, board logic, players, GUI
+controller flow, suggestions and accusations.
+
+If JUnit is available locally, compile and run the tests from the project root.
+The latest verified test run passed all tests.

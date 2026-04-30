@@ -12,8 +12,10 @@ import com.cluegame.model.Square;
 import com.cluegame.model.Suggestion;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * Represents an autonomous AI player in Clue!
@@ -43,6 +45,10 @@ public class AIPlayer extends Player {
     private String lastSuggestedSuspect;
     private String lastSuggestedWeapon;
     private Suggestion undisprovedSuggestion;
+    private Set<String> visitedRooms;
+    private String confirmedSuspect;
+    private String confirmedWeapon;
+    private String confirmedRoom;
 
     /**
      * Constructs an AI player with a name, token and starting position.
@@ -58,6 +64,10 @@ public class AIPlayer extends Player {
         this.lastSuggestedSuspect = null;
         this.lastSuggestedWeapon = null;
         this.undisprovedSuggestion = null;
+        this.visitedRooms = new HashSet<>();
+        this.confirmedSuspect = null;
+        this.confirmedWeapon = null;
+        this.confirmedRoom = null;
     }
 
     /**
@@ -88,7 +98,7 @@ public class AIPlayer extends Player {
             // use secret passage if it leads to an unvisited room, or randomly
             if (getCurrentRoom().hasSecretPassage()) {
                 Room dest = getCurrentRoom().getSecretPassage();
-                boolean destUnvisited = !notepad.getSeenCards().contains(dest.getName());
+                boolean destUnvisited = !visitedRooms.contains(dest.getName());
                 if (destUnvisited || random.nextInt(3) == 0) {
                     System.out.println(getName() + " uses the secret passage to "
                             + dest.getName() + ".");
@@ -154,9 +164,13 @@ public class AIPlayer extends Player {
     public Suggestion makeSuggestion() {
         if (getCurrentRoom() == null) return null;
 
-        String suspect = pickBest(SUSPECTS, lastSuggestedSuspect);
-        String weapon = pickBest(WEAPONS, lastSuggestedWeapon);
         String roomName = getCurrentRoom().getName();
+        String suspect = confirmedSuspect != null
+                ? confirmedSuspect
+                : pickBest(SUSPECTS, lastSuggestedSuspect);
+        String weapon = confirmedWeapon != null
+                ? confirmedWeapon
+                : pickBest(WEAPONS, lastSuggestedWeapon);
 
         lastSuggestedSuspect = suspect;
         lastSuggestedWeapon = weapon;
@@ -218,61 +232,39 @@ public class AIPlayer extends Player {
      * @param suggestion the undisproved suggestion
      */
     public void setUndisprovedSuggestion(Suggestion suggestion) {
-        this.undisprovedSuggestion = suggestion;
+        boolean learned = learnFromUndisprovedSuggestion(suggestion);
+        this.undisprovedSuggestion = learned ? suggestion : null;
     }
 
     /**
-     * Makes an accusation if the AI has enough information. Checks in order:
-     * 1. Fully deduced (all three categories narrowed to one) — accuse.
-     * 2. Has an undisproved suggestion — 50% chance to accuse with it.
-     * 3. Two of three categories deduced — 50% chance to guess the third.
-     * 4. Otherwise, do not accuse.
+     * Makes an accusation only when the AI has enough confirmed information.
+     * Confirmed cards can come from normal notepad deduction or from
+     * undisproved suggestions where the AI can rule out its own hand.
      * @return an Accusation if the AI is ready, or null
      */
     @Override
     public Accusation makeAccusation() {
-        String suspect = notepad.deduceMissing(SUSPECTS);
-        String weapon = notepad.deduceMissing(WEAPONS);
-        String room = notepad.deduceMissing(ROOMS);
+        if (undisprovedSuggestion != null) {
+            learnFromUndisprovedSuggestion(undisprovedSuggestion);
+        }
 
-        // fully deduced — accuse with certainty
+        String suspect = confirmedSuspect != null
+                ? confirmedSuspect
+                : notepad.deduceMissing(SUSPECTS);
+        String weapon = confirmedWeapon != null
+                ? confirmedWeapon
+                : notepad.deduceMissing(WEAPONS);
+        String room = confirmedRoom != null
+                ? confirmedRoom
+                : notepad.deduceMissing(ROOMS);
+
+        // only accuse when all three categories are fully deduced
         if (suspect != null && weapon != null && room != null) {
             return new Accusation(
                     new SuspectCard(suspect),
                     new WeaponCard(weapon),
                     new RoomCard(room)
             );
-        }
-
-        // undisproved suggestion — strong candidate, 50% chance to pounce
-        if (undisprovedSuggestion != null && random.nextInt(2) == 0) {
-            Accusation acc = new Accusation(
-                    undisprovedSuggestion.getSuspect(),
-                    undisprovedSuggestion.getWeapon(),
-                    undisprovedSuggestion.getRoom()
-            );
-            undisprovedSuggestion = null; // only try once
-            return acc;
-        }
-
-        // calculated risk: if 2 of 3 categories are deduced, guess the third
-        if (random.nextInt(2) == 0) {
-            int deduced = 0;
-            if (suspect != null) deduced++;
-            if (weapon != null) deduced++;
-            if (room != null) deduced++;
-
-            if (deduced == 2) {
-                if (suspect == null) suspect = pickBest(SUSPECTS, null);
-                if (weapon == null) weapon = pickBest(WEAPONS, null);
-                if (room == null) room = pickBest(ROOMS, null);
-
-                return new Accusation(
-                        new SuspectCard(suspect),
-                        new WeaponCard(weapon),
-                        new RoomCard(room)
-                );
-            }
         }
 
         return null;
@@ -298,6 +290,10 @@ public class AIPlayer extends Player {
     @Override
     public void seeDisprovalCard(Card card, String fromPlayerName) {
         notepad.markSeen(card);
+        if (undisprovedSuggestion != null
+                && suggestionContainsName(undisprovedSuggestion, card.getName())) {
+            undisprovedSuggestion = null;
+        }
     }
 
     /**
@@ -306,6 +302,82 @@ public class AIPlayer extends Player {
      */
     public DetectiveNotepad getNotepad() {
         return notepad;
+    }
+
+    /**
+     * Records that the AI has physically visited a room. This is used only
+     * for movement/exploration preferences and must not be confused with
+     * seeing a room card.
+     * @param roomName the room that was visited
+     */
+    public void markVisitedRoom(String roomName) {
+        visitedRooms.add(roomName);
+    }
+
+    /**
+     * Returns the set of rooms the AI has visited during play.
+     * @return visited room names
+     */
+    public Set<String> getVisitedRooms() {
+        return visitedRooms;
+    }
+
+    /**
+     * Returns the confirmed murder room, if the AI has deduced it.
+     * @return confirmed room name, or null if still unknown
+     */
+    public String getConfirmedRoomName() {
+        return confirmedRoom;
+    }
+
+    /**
+     * Returns true if this room card is still useful evidence for the AI.
+     * Rooms already in the AI's hand or shown by another player cannot be
+     * the murder room, so moving there is lower value.
+     * @param roomName the room to evaluate
+     * @return true if the room could still be in the envelope
+     */
+    public boolean couldRoomBeEnvelope(String roomName) {
+        return confirmedRoom == null && isEnvelopeCandidate(roomName);
+    }
+
+    private boolean holdsCardNamed(String cardName) {
+        for (Card card : getHand()) {
+            if (card.getName().equals(cardName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean suggestionContainsName(Suggestion suggestion, String cardName) {
+        return suggestion.getSuspect().getName().equals(cardName)
+                || suggestion.getWeapon().getName().equals(cardName)
+                || suggestion.getRoom().getName().equals(cardName);
+    }
+
+    private boolean learnFromUndisprovedSuggestion(Suggestion suggestion) {
+        boolean learned = false;
+
+        if (isEnvelopeCandidate(suggestion.getSuspect().getName())) {
+            confirmedSuspect = suggestion.getSuspect().getName();
+            learned = true;
+        }
+        if (isEnvelopeCandidate(suggestion.getWeapon().getName())) {
+            confirmedWeapon = suggestion.getWeapon().getName();
+            learned = true;
+        }
+        if (isEnvelopeCandidate(suggestion.getRoom().getName())) {
+            confirmedRoom = suggestion.getRoom().getName();
+            learned = true;
+        }
+
+        return learned;
+    }
+
+    private boolean isEnvelopeCandidate(String cardName) {
+        return !holdsCardNamed(cardName)
+                && !notepad.getSeenCards().contains(cardName);
     }
 
     /**

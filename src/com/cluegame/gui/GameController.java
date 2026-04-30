@@ -16,8 +16,13 @@ import com.cluegame.players.AIPlayer;
 import com.cluegame.players.HumanPlayer;
 import com.cluegame.players.Player;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Controller for the JavaFX GUI turn flow. Manages movement, suggestions,
@@ -49,9 +54,15 @@ public class GameController {
     private int previousCol;
     private boolean gameOver;
     private Player winner;
+    private SuggestionCardChooser suggestionCardChooser;
 
     // tracks the last room each AI exited, to prevent immediate re-entry
     private java.util.Map<String, String> aiLastExitedRoom = new java.util.HashMap<>();
+
+    @FunctionalInterface
+    public interface SuggestionCardChooser {
+        Card chooseCard(Player disprover, List<Card> matchingCards, String askerName);
+    }
 
     /**
      * Creates a controller for the given game state.
@@ -64,7 +75,7 @@ public class GameController {
         this.dice = game.getDice();
         this.players = game.getPlayers();
         this.envelope = game.getMurderEnvelope();
-        this.currentPlayerIndex = 0;
+        this.currentPlayerIndex = game.getCurrentPlayerIndex();
         this.remainingSteps = 0;
         this.movementActive = false;
         this.previousRow = -1;
@@ -242,7 +253,16 @@ public class GameController {
             Player other = players.get(idx);
             List<Card> matches = other.getMatchingCards(suggestion);
             if (!matches.isEmpty()) {
-                Card shown = matches.get(0);
+                Card shown;
+                if (other instanceof HumanPlayer && suggestionCardChooser != null) {
+                    shown = suggestionCardChooser.chooseCard(
+                            other, matches, suggester.getName());
+                } else if (other instanceof HumanPlayer) {
+                    // Avoid console blocking in GUI/tests if no chooser is set.
+                    shown = matches.get(0);
+                } else {
+                    shown = other.chooseSuggestionCard(matches, suggester.getName());
+                }
                 return new SuggestionResult(other.getName(), shown, true);
             }
         }
@@ -330,6 +350,12 @@ public class GameController {
         lastExitedRoom = aiLastExitedRoom.get(ai.getName());
         log.add("--- " + ai.getName() + "'s turn ---");
 
+        Accusation earlyAccusation = ai.makeAccusation();
+        if (earlyAccusation != null) {
+            handleAIAccusation(ai, earlyAccusation, log);
+            return log;
+        }
+
         // movement phase
         if (ai.getCurrentRoom() != null) {
             Room room = ai.getCurrentRoom();
@@ -367,9 +393,9 @@ public class GameController {
 
         // suggestion phase
         if (ai.getCurrentRoom() != null && ai.isActive()) {
-            // mark the current room as seen (AI knows this room is not in envelope
-            // if it holds the room card, or it will learn through suggestions)
-            ai.getNotepad().markSeen(ai.getCurrentRoom().getName());
+            // Track exploration separately from card knowledge:
+            // entering a room does not mean the AI has seen that room card.
+            ai.markVisitedRoom(ai.getCurrentRoom().getName());
 
             Suggestion suggestion = ai.makeSuggestion();
             if (suggestion != null) {
@@ -403,20 +429,24 @@ public class GameController {
                 if (ai.isActive() && !gameOver) {
                     Accusation accusation = ai.makeAccusation();
                     if (accusation != null) {
-                        log.add(ai.getName() + " accuses: " + accusation);
-                        boolean correct = checkAccusation(accusation);
-                        if (correct) {
-                            log.add(ai.getName() + " wins the game!");
-                        } else {
-                            log.add(ai.getName()
-                                    + "'s accusation was WRONG! Eliminated.");
-                        }
+                        handleAIAccusation(ai, accusation, log);
                     }
                 }
             }
         }
 
         return log;
+    }
+
+    private void handleAIAccusation(AIPlayer ai, Accusation accusation,
+                                    List<String> log) {
+        log.add(ai.getName() + " accuses: " + accusation);
+        boolean correct = checkAccusation(accusation);
+        if (correct) {
+            log.add(ai.getName() + " wins the game!");
+        } else {
+            log.add(ai.getName() + "'s accusation was WRONG! Eliminated.");
+        }
     }
 
     /**
@@ -470,109 +500,169 @@ public class GameController {
             aiLastExitedRoom.remove(ai.getName());
             lastExitedRoom = null;
         }
+
+        log.add(ai.getName() + " ends the turn at ("
+                + ai.getRow() + ", " + ai.getCol() + ").");
     }
 
     /**
-     * Finds the best direction for an AI player to move, heading toward
-     * the nearest room door (excluding the room they just left).
+     * Finds the next step for an AI player to move, following a shortest
+     * reachable path toward a room door rather than using a greedy
+     * Manhattan-distance heuristic.
      */
     private int[] findBestDirection(Player ai) {
-        int[][] directions = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
-        Square target = findNearestDoor(ai);
+        if (ai instanceof AIPlayer) {
+            AIPlayer aiPlayer = (AIPlayer) ai;
+            String confirmedRoom = aiPlayer.getConfirmedRoomName();
+            if (confirmedRoom != null) {
+                int[] step = findPathStepToRoom(ai, confirmedRoom);
+                if (step != null) return step;
+            }
 
+            List<Square> evidenceDoors = new ArrayList<>();
+            for (Room room : board.getRooms().values()) {
+                if (aiPlayer.couldRoomBeEnvelope(room.getName())) {
+                    evidenceDoors.addAll(room.getDoors());
+                }
+            }
+            int[] step = findPathStepToAnyDoor(ai, evidenceDoors);
+            if (step != null) return step;
+        }
+
+        List<Square> unseenDoors = new ArrayList<>();
+        List<Square> seenDoors = new ArrayList<>();
+        List<Square> fallbackDoors = new ArrayList<>();
+
+        Set<String> visitedRooms = Collections.emptySet();
+        if (ai instanceof AIPlayer) {
+            visitedRooms = ((AIPlayer) ai).getVisitedRooms();
+        }
+
+        for (Room room : board.getRooms().values()) {
+            boolean isLastExited = lastExitedRoom != null
+                    && room.getName().equals(lastExitedRoom);
+            boolean visited = visitedRooms.contains(room.getName());
+
+            for (Square door : room.getDoors()) {
+                fallbackDoors.add(door);
+                if (isLastExited) {
+                    continue;
+                }
+                if (visited) {
+                    seenDoors.add(door);
+                } else {
+                    unseenDoors.add(door);
+                }
+            }
+        }
+
+        int[] step = findPathStepToAnyDoor(ai, unseenDoors);
+        if (step != null) return step;
+
+        step = findPathStepToAnyDoor(ai, seenDoors);
+        if (step != null) return step;
+
+        step = findPathStepToAnyDoor(ai, fallbackDoors);
+        if (step != null) return step;
+
+        return findAnyValidDirection(ai);
+    }
+
+    private int[] findPathStepToRoom(Player ai, String roomName) {
+        Room targetRoom = board.getRoom(roomName);
+        if (targetRoom == null) return null;
+        return findPathStepToAnyDoor(ai, new ArrayList<>(targetRoom.getDoors()));
+    }
+
+    /**
+     * Runs a breadth-first search from the AI's current position and returns
+     * the first step on a shortest reachable path to any target door.
+     */
+    private int[] findPathStepToAnyDoor(Player ai, List<Square> targets) {
+        if (targets.isEmpty()) return null;
+
+        Set<String> targetKeys = new HashSet<>();
+        for (Square door : targets) {
+            targetKeys.add(door.getRow() + "," + door.getCol());
+        }
+
+        int[][] directions = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+        boolean[][] visited = new boolean[Board.ROWS][Board.COLS];
+        ArrayDeque<int[]> queue = new ArrayDeque<>();
+
+        int startRow = ai.getRow();
+        int startCol = ai.getCol();
+        visited[startRow][startCol] = true;
+
+        List<int[]> firstMoves = new ArrayList<>();
+        for (int[] d : directions) {
+            int nr = startRow + d[0];
+            int nc = startCol + d[1];
+            if (board.isValidMove(startRow, startCol, nr, nc, players)) {
+                firstMoves.add(new int[]{nr, nc, d[0], d[1]});
+            }
+        }
+        Collections.shuffle(firstMoves);
+
+        for (int[] move : firstMoves) {
+            int row = move[0];
+            int col = move[1];
+            visited[row][col] = true;
+            if (targetKeys.contains(row + "," + col)) {
+                return new int[]{move[2], move[3]};
+            }
+            queue.add(move);
+        }
+
+        while (!queue.isEmpty()) {
+            int[] state = queue.removeFirst();
+            int row = state[0];
+            int col = state[1];
+            int firstDr = state[2];
+            int firstDc = state[3];
+
+            for (int[] d : directions) {
+                int nr = row + d[0];
+                int nc = col + d[1];
+                if (nr < 0 || nr >= Board.ROWS || nc < 0 || nc >= Board.COLS) {
+                    continue;
+                }
+                if (visited[nr][nc]) {
+                    continue;
+                }
+                if (!board.isValidMove(row, col, nr, nc, players)) {
+                    continue;
+                }
+                visited[nr][nc] = true;
+                if (targetKeys.contains(nr + "," + nc)) {
+                    return new int[]{firstDr, firstDc};
+                }
+                queue.add(new int[]{nr, nc, firstDr, firstDc});
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Falls back to any valid single-step move if no route to a door is found.
+     */
+    private int[] findAnyValidDirection(Player ai) {
+        int[][] directions = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
         List<int[]> validDirs = new ArrayList<>();
-        List<int[]> bestDirs = new ArrayList<>();
-        int bestDist = Integer.MAX_VALUE;
 
         for (int[] d : directions) {
             int nr = ai.getRow() + d[0];
             int nc = ai.getCol() + d[1];
             if (board.isValidMove(ai.getRow(), ai.getCol(), nr, nc, players)) {
                 validDirs.add(d);
-                if (target != null) {
-                    int dist = Math.abs(nr - target.getRow())
-                             + Math.abs(nc - target.getCol());
-                    if (dist < bestDist) {
-                        bestDist = dist;
-                        bestDirs.clear();
-                        bestDirs.add(d);
-                    } else if (dist == bestDist) {
-                        bestDirs.add(d);
-                    }
-                }
             }
         }
 
-        // pick randomly among tied best directions to avoid oscillation
-        if (!bestDirs.isEmpty()) {
-            return bestDirs.get((int) (Math.random() * bestDirs.size()));
+        if (validDirs.isEmpty()) {
+            return null;
         }
-        if (!validDirs.isEmpty()) {
-            return validDirs.get((int) (Math.random() * validDirs.size()));
-        }
-        return null;
-    }
-
-    /**
-     * Finds the best room door for the AI to head toward. Prioritises:
-     * 1. Nearest door to an unseen/unvisited room (excluding just-exited)
-     * 2. Nearest door to any room (excluding just-exited)
-     * 3. Any door at all (fallback)
-     * This encourages the AI to explore the full board before revisiting.
-     */
-    private Square findNearestDoor(Player ai) {
-        java.util.Set<String> seenRooms = java.util.Collections.emptySet();
-        if (ai instanceof AIPlayer) {
-            seenRooms = ((AIPlayer) ai).getNotepad().getSeenCards();
-        }
-
-        Square nearestUnseen = null;
-        int minUnseenDist = Integer.MAX_VALUE;
-        Square nearestSeen = null;
-        int minSeenDist = Integer.MAX_VALUE;
-
-        for (Room room : board.getRooms().values()) {
-            // skip the room we just left this turn
-            if (lastExitedRoom != null
-                    && room.getName().equals(lastExitedRoom)) {
-                continue;
-            }
-
-            boolean visited = seenRooms.contains(room.getName());
-
-            for (Square door : room.getDoors()) {
-                int dist = Math.abs(ai.getRow() - door.getRow())
-                         + Math.abs(ai.getCol() - door.getCol());
-
-                if (!visited && dist < minUnseenDist) {
-                    minUnseenDist = dist;
-                    nearestUnseen = door;
-                } else if (visited && dist < minSeenDist) {
-                    minSeenDist = dist;
-                    nearestSeen = door;
-                }
-            }
-        }
-
-        // prefer unseen rooms to encourage exploration
-        if (nearestUnseen != null) return nearestUnseen;
-        if (nearestSeen != null) return nearestSeen;
-
-        // fallback: if nothing found (all doors blocked by lastExitedRoom),
-        // allow any door
-        Square fallback = null;
-        int fallbackDist = Integer.MAX_VALUE;
-        for (Room room : board.getRooms().values()) {
-            for (Square door : room.getDoors()) {
-                int dist = Math.abs(ai.getRow() - door.getRow())
-                         + Math.abs(ai.getCol() - door.getCol());
-                if (dist < fallbackDist) {
-                    fallbackDist = dist;
-                    fallback = door;
-                }
-            }
-        }
-        return fallback;
+        return validDirs.get((int) (Math.random() * validDirs.size()));
     }
 
     // --- Turn advancement ---
@@ -582,6 +672,20 @@ public class GameController {
      * is human (needs interactive turn), false if AI (caller should run AI turn).
      */
     public void advanceToNextPlayer() {
+        int activeCount = 0;
+        for (Player p : players) {
+            if (p.isActive()) activeCount++;
+        }
+        if (activeCount == 0) {
+            winner = null;
+            gameOver = true;
+            movementActive = false;
+            remainingSteps = 0;
+            previousRow = -1;
+            previousCol = -1;
+            return;
+        }
+
         do {
             currentPlayerIndex = (currentPlayerIndex + 1) % players.size();
         } while (!players.get(currentPlayerIndex).isActive());
@@ -615,6 +719,9 @@ public class GameController {
     public Player getWinner() { return winner; }
     public MurderEnvelope getEnvelope() { return envelope; }
     public Game getGame() { return game; }
+    public void setSuggestionCardChooser(SuggestionCardChooser chooser) {
+        this.suggestionCardChooser = chooser;
+    }
 
     public static String[] getSuspects() { return SUSPECTS; }
     public static String[] getWeapons() { return WEAPONS; }
